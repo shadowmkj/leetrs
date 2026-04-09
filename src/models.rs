@@ -1,3 +1,4 @@
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Debug)]
@@ -6,6 +7,29 @@ pub struct GraphQLQuery {
     pub variables: serde_json::Value,
     #[serde(rename = "operationName")]
     pub operation_name: Option<String>,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum Language {
+    Python,
+    Rust,
+}
+
+impl Language {
+    pub fn to_lang_slug(&self) -> &'static str {
+        match self {
+            Language::Python => "python3",
+            Language::Rust => "rust",
+        }
+    }
+
+    pub fn from_extension(ext: &str) -> Self {
+        match ext {
+            "py" => Language::Python,
+            "rs" => Language::Rust,
+            _ => Language::Python,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -19,6 +43,8 @@ pub struct QuestionSnippet {
 pub struct Question {
     #[serde(rename = "questionId")]
     pub question_id: String,
+    #[serde(rename = "titleSlug")]
+    pub title_slug: String,
     pub title: String,
     pub content: String,
     #[serde(rename = "codeSnippets")]

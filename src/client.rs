@@ -1,6 +1,8 @@
 use crate::auth::LeetCodeCredentials;
 use crate::error::{EngineError, Result};
-use crate::models::{GraphQLQuery, Question, SubmissionCheckResult, SubmitPayload, SubmitResponse};
+use crate::models::{
+    GraphQLQuery, Language, Question, SubmissionCheckResult, SubmitPayload, SubmitResponse,
+};
 use reqwest::Client;
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::json;
@@ -75,7 +77,11 @@ impl LeetCodeClient {
     }
 
     /// Fetch a specific problem's details and boilerplate using its URL slug
-    pub async fn get_question_by_slug(&self, title_slug: &str) -> Result<Question> {
+    pub async fn get_question_by_slug(
+        &self,
+        title_slug: &str,
+        language: &Language,
+    ) -> Result<Question> {
         // 1. Define the exact GraphQL query LeetCode expects
         let query_string = r#"
             query questionData($titleSlug: String!) {
@@ -113,7 +119,7 @@ impl LeetCodeClient {
         Ok(response.question)
     }
     /// Fetch a specific problem's details and boilerplate using its numerical ID
-    pub async fn get_question_by_id(&self, id: u64) -> Result<Question> {
+    pub async fn get_question_by_id(&self, id: u64, lang: &Language) -> Result<Question> {
         let url = "https://leetcode.com/api/problems/all/";
 
         let response = self.http_client.get(url).send().await?;
@@ -153,7 +159,7 @@ impl LeetCodeClient {
             .ok_or_else(|| EngineError::GraphQL(format!("Problem with ID {} not found", id)))?;
 
         // Chain directly into the slug fetcher, returning Result<Question>
-        self.get_question_by_slug(&slug).await
+        self.get_question_by_slug(&slug, lang).await
     }
 
     /// Submit raw code to a problem

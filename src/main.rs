@@ -1,8 +1,11 @@
-use std::{fs, process::Command};
+use std::{
+    fs::{self},
+    process::Command,
+};
 
 use clap::{Parser, Subcommand};
 use dialoguer::{Password, Select, theme::ColorfulTheme};
-use lcode_rust::{auth::LeetCodeCredentials, client::LeetCodeClient};
+use lcode::{auth::LeetCodeCredentials, client::LeetCodeClient, models::Language, picker::Picker};
 
 #[derive(Parser, Debug)]
 #[command(name = "lcode")]
@@ -21,12 +24,19 @@ enum Commands {
     /// Check auth status
     Status,
     /// Pick a problem
-    Pick { identifier: String },
+    Pick {
+        identifier: String,
+        language: Option<Language>,
+        #[arg(short, long)]
+        preview: bool,
+    },
     /// Submit a problem to leetcode
     Submit {
         /// The path to your solution file (e.g., 'two_sum.rs')
         file: String,
     },
+    /// Check lcode version
+    Version,
 }
 
 #[tokio::main]
@@ -58,9 +68,7 @@ async fn main() {
 
             match credentials_result {
                 Ok(creds) => match creds.save() {
-                    Ok(_) => println!(
-                        "\n✅ Authentication successful! Credentials saved to ~/.config/lcode/credentials.json"
-                    ),
+                    Ok(_) => println!("\n✅ Authentication successful!"),
                     Err(e) => eprintln!("\n❌ Failed to save credentials: {}", e),
                 },
                 Err(e) => {
@@ -94,8 +102,11 @@ async fn main() {
                 }
             }
         }
-        Commands::Pick { identifier } => {
-            // 1. Load credentials and initialize client
+        Commands::Pick {
+            identifier,
+            language,
+            preview,
+        } => {
             let creds = match LeetCodeCredentials::load() {
                 Some(c) => c,
                 None => {
@@ -103,7 +114,6 @@ async fn main() {
                     return;
                 }
             };
-
             let client = match LeetCodeClient::new(creds) {
                 Ok(c) => c,
                 Err(e) => {
@@ -111,76 +121,35 @@ async fn main() {
                     return;
                 }
             };
-
-            // 2. Fetch the question data
-            let question = if identifier.chars().all(char::is_numeric) {
-                let id: u64 = identifier.parse().unwrap();
-                println!("🔍 Fetching problem ID: {}...", id);
-                client.get_question_by_id(id).await.unwrap()
-            } else {
-                println!("🔍 Fetching problem: {}...", identifier);
-                client.get_question_by_slug(&identifier).await.unwrap()
-            };
-
-            // 3. Display the Title and Description
-            println!("\n==================================================");
-            println!("  {}", question.title);
-            println!("==================================================\n");
-
-            // Convert LeetCode's raw HTML into wrapped terminal text (80 columns wide)
-            let formatted_content = html2text::from_read(question.content.as_bytes(), 80);
-            if let Ok(content) = formatted_content {
-                let md_content = format!("# {}\n\n{}", question.title, content);
-                // 2. determine filenames (converting kebab-case to snake_case)
-                let snake_slug = identifier.replace("-", "_");
-                let code_filename = format!("{}.rs", snake_slug);
-                let desc_filename = format!("{}.md", snake_slug);
-
-                // 3. write both files to disk
-                let rust_snippet = question
-                    .code_snippets
-                    .into_iter()
-                    .find(|s| s.lang_slug == "rust");
-
-                if let Some(snippet) = rust_snippet {
-                    if let Err(e) = fs::write(&code_filename, snippet.code) {
-                        eprintln!("❌ failed to write code file: {}", e);
-                        return;
-                    }
-                    if let Err(e) = fs::write(&desc_filename, md_content) {
-                        eprintln!("❌ failed to write description file: {}", e);
-                        return;
-                    }
-
-                    println!("✅ files generated successfully.");
-                } else {
-                    eprintln!("⚠️ no rust boilerplate found for this problem.");
-                    return;
-                }
-
+            let picker = Picker::new(client);
+            if let Ok((code, desc)) = picker.pick(identifier, language).await {
                 // 4. launch neovim with a vertical split
                 println!("🚀 launching neovim...");
+                if !*preview {
+                    let status = Command::new("nvim")
+                        .arg(&desc)
+                        .arg("-c")
+                        .arg(format!("vsplit {}", code)) // Force a vertical split with the code file
+                        .status();
 
-                let status = Command::new("nvim")
-                    .arg(&desc_filename)
-                    .arg("-c")
-                    .arg(format!("vsplit {}", code_filename)) // Force a vertical split with the code file
-                    .status();
-
-                match status {
-                    Ok(exit_status) if exit_status.success() => {
-                        println!("\n👋 neovim closed.");
-                        // in the future, this is exactly where we can prompt:
-                        // "would you like to submit {} to leetcode now? (y/n)"
+                    match status {
+                        Ok(exit_status) if exit_status.success() => {
+                            println!("\n👋 neovim closed.");
+                        }
+                        Ok(exit_status) => {
+                            eprintln!("⚠️ neovim exited with an error code: {}", exit_status);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "❌ failed to launch neovim. is it installed and in your path? error: {}",
+                                e
+                            );
+                        }
                     }
-                    Ok(exit_status) => {
-                        eprintln!("⚠️ neovim exited with an error code: {}", exit_status);
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "❌ failed to launch neovim. is it installed and in your path? error: {}",
-                            e
-                        );
+                } else {
+                    let content = fs::read_to_string(desc);
+                    if let Ok(content) = content {
+                        print!("{}", content);
                     }
                 }
             }
@@ -219,11 +188,14 @@ async fn main() {
                 .to_str()
                 .unwrap_or_default();
             let slug = file_stem.replace("_", "-");
-
             println!("🔍 Resolving ID for '{}'...", slug);
-
+            let language = Language::from_extension(
+                path.extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or_default(),
+            );
             // 3. Fetch the question to get its internal ID
-            let question = match client.get_question_by_slug(&slug).await {
+            let question = match client.get_question_by_slug(&slug, &language).await {
                 Ok(q) => q,
                 Err(e) => {
                     eprintln!(
@@ -237,7 +209,7 @@ async fn main() {
             // 4. Submit the code
             println!("🚀 Submitting {}...", file);
             let submission_id = match client
-                .submit_code(&slug, &question.question_id, "rust", &code)
+                .submit_code(&slug, &question.question_id, language.to_lang_slug(), &code)
                 .await
             {
                 Ok(id) => id,
@@ -264,10 +236,12 @@ async fn main() {
 
             if status == "Accepted" {
                 // Print Accepted in Green
-                println!("  ✅ \x1b[32m{}\x1b[0m", status);
+                // println!("  ✅ \x1b[32m{}\x1b[0m", status);
+                println!("  ✅ {}", status);
             } else {
                 // Print Errors/Wrong Answers in Red
-                println!("  ❌ \x1b[31m{}\x1b[0m", status);
+                // println!("  ❌ \x1b[31m{}\x1b[0m", status);
+                println!("  ❌ {}", status);
             }
 
             println!("==================================================\n");
@@ -288,6 +262,9 @@ async fn main() {
                     println!("💥 Compiler Output:\n{}", err_msg);
                 }
             }
+        }
+        Commands::Version => {
+            println!("lcode 1.0");
         }
     }
 }

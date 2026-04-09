@@ -10,6 +10,8 @@ pub enum EngineError {
     Parse(#[from] serde_json::Error),
     #[error("GraphQL error: {0}")]
     GraphQL(String),
+    #[error("System error")]
+    System,
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

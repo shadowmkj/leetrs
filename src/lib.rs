@@ -5,3 +5,5 @@ pub mod auth;
 pub mod models;
 
 pub mod client;
+
+pub mod picker;
