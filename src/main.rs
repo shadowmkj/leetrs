@@ -10,8 +10,13 @@ use clap_complete::{
     aot::{Bash, Fish, Zsh},
     generate,
 };
-use dialoguer::{Password, Select, theme::ColorfulTheme};
-use leetrs::{auth::LeetCodeCredentials, client::LeetCodeClient, models::Language, picker::Picker};
+use dialoguer::{Select, theme::ColorfulTheme};
+use leetrs::{
+    auth::{LeetCodeCredentials, auto_extract_flow, manual_auth_flow},
+    client::LeetCodeClient,
+    models::Language,
+    picker::Picker,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "leetrs")]
@@ -179,97 +184,8 @@ async fn main() {
                 }
             };
 
-            // 1. Read the file content
-            let code = match std::fs::read_to_string(&file) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("❌ Failed to read file '{}': {}", file, e);
-                    return;
-                }
-            };
-
-            // 2. Extract the slug from the filename (e.g., "two_sum.rs" -> "two-sum")
-            let path = std::path::Path::new(&file);
-            let file_stem = path
-                .file_stem()
-                .unwrap_or_default()
-                .to_str()
-                .unwrap_or_default();
-            let slug = file_stem.replace("_", "-");
-            println!("🔍 Resolving ID for '{}'...", slug);
-            let language = Language::from_extension(
-                path.extension()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or_default(),
-            );
-            // 3. Fetch the question to get its internal ID
-            let question = match client.get_question_by_slug(&slug, &language).await {
-                Ok(q) => q,
-                Err(e) => {
-                    eprintln!(
-                        "❌ Failed to fetch question ID. Does the filename match the problem slug? Error: {}",
-                        e
-                    );
-                    return;
-                }
-            };
-
-            // 4. Submit the code
-            println!("🚀 Submitting {}...", file);
-            let submission_id = match client
-                .submit_code(&slug, &question.question_id, language.to_lang_slug(), &code)
-                .await
-            {
-                Ok(id) => id,
-                Err(e) => {
-                    eprintln!("❌ Submission failed: {}", e);
-                    return;
-                }
-            };
-
-            // 5. Poll for results
-            println!("⏳ Code queued. Waiting for execution results...");
-            let result = match client.check_submission(submission_id).await {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("❌ Failed to check submission status: {}", e);
-                    return;
-                }
-            };
-
-            // 6. Display the formatted results
-            println!("\n==================================================");
-
-            let status = result.status_msg.unwrap_or_else(|| "Unknown".to_string());
-
-            if status == "Accepted" {
-                // Print Accepted in Green
-                // println!("  ✅ \x1b[32m{}\x1b[0m", status);
-                println!("  ✅ {}", status);
-            } else {
-                // Print Errors/Wrong Answers in Red
-                // println!("  ❌ \x1b[31m{}\x1b[0m", status);
-                println!("  ❌ {}", status);
-            }
-
-            println!("==================================================\n");
-
-            if let (Some(correct), Some(total)) = (result.total_correct, result.total_testcases) {
-                println!("🧪 Testcases: {} / {} passed", correct, total);
-            }
-
-            if status == "Accepted" {
-                if let Some(runtime) = result.status_runtime {
-                    println!("⏱️  Runtime: {}", runtime);
-                }
-                if let Some(memory) = result.status_memory {
-                    println!("💾 Memory: {}", memory);
-                }
-            } else if status == "Compile Error" {
-                if let Some(err_msg) = result.compile_error {
-                    println!("💥 Compiler Output:\n{}", err_msg);
-                }
-            }
+            let picker = Picker::new(client);
+            picker.submit(file).await;
         }
         Commands::Version => {
             println!("leetrs 1.0");
@@ -286,66 +202,5 @@ async fn main() {
                 _ => todo!(),
             }
         }
-    }
-}
-
-/// Handles prompting the user to paste their tokens manually
-fn manual_auth_flow() -> Result<LeetCodeCredentials, String> {
-    println!("\nPlease extract your cookies from your browser session.");
-    println!("(Developer Tools -> Application -> Cookies -> leetcode.com)\n");
-
-    let session_cookie = Password::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter LEETCODE_SESSION cookie")
-        .interact()
-        .map_err(|e| e.to_string())?;
-
-    let csrf_token = Password::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter csrftoken cookie")
-        .interact()
-        .map_err(|e| e.to_string())?;
-
-    Ok(LeetCodeCredentials {
-        session_cookie,
-        csrf_token,
-    })
-}
-
-/// Automatically extracts LeetCode cookies from the specified browser
-fn auto_extract_flow(browser: &str) -> Result<LeetCodeCredentials, String> {
-    println!("\n🔍 Attempting to extract cookies from {}...", browser);
-
-    // We only want to query cookies belonging to LeetCode to speed up the process
-    let domains = Some(vec!["leetcode.com".to_string()]);
-
-    let cookies = match browser {
-        "chrome" => {
-            rookie::chrome(domains).map_err(|e| format!("Chrome extraction failed: {}", e))?
-        }
-        "firefox" => {
-            rookie::firefox(domains).map_err(|e| format!("Firefox extraction failed: {}", e))?
-        }
-        _ => return Err("Unsupported browser".into()),
-    };
-
-    let mut session_cookie = None;
-    let mut csrf_token = None;
-
-    // Search the returned cookies for the two we care about
-    for cookie in cookies {
-        if cookie.name == "LEETCODE_SESSION" {
-            session_cookie = Some(cookie.value);
-        } else if cookie.name == "csrftoken" {
-            csrf_token = Some(cookie.value);
-        }
-    }
-
-    match (session_cookie, csrf_token) {
-        (Some(session), Some(csrf)) => Ok(LeetCodeCredentials {
-            session_cookie: session,
-            csrf_token: csrf,
-        }),
-        _ => Err(
-            "Could not find both LEETCODE_SESSION and csrftoken in the browser's database.".into(),
-        ),
     }
 }
