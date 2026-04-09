@@ -77,4 +77,12 @@ pub struct SubmissionCheckResult {
     pub total_testcases: Option<u32>,
     pub status_memory: Option<String>,
     pub status_runtime: Option<String>,
+    pub expected_output: Option<String>,
+    pub code_output: Option<String>,
+    pub finished: Option<bool>,
+    pub input_formatted: Option<String>,
+    pub input: Option<String>,
+    pub last_testcase: Option<String>,
+    pub memory_percentile: Option<f64>,
+    pub runtime_percentile: Option<f64>,
 }
