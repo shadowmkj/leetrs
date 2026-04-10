@@ -94,7 +94,11 @@ impl Screen for SelectionScreen {
 
         let bottom_bar = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(2), Constraint::Length(2)])
+            .constraints([
+                Constraint::Length(2),
+                Constraint::Length(2),
+                Constraint::Length(2),
+            ])
             .split(chunks[2]);
 
         let instructions = match self.input_mode {
@@ -117,6 +121,10 @@ impl Screen for SelectionScreen {
             .style(Style::default().fg(Color::DarkGray));
             frame.render_widget(filter_hint, bottom_bar[1]);
         }
+
+        let help_hint =
+            Paragraph::new("Press ? to view help.").style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(help_hint, bottom_bar[2]);
     }
 
     fn event_loop(&mut self, key_event: &KeyEvent) -> Option<Action> {
