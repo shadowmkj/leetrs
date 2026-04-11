@@ -360,10 +360,23 @@ impl Picker {
                 // Fetch data in the background and update data.json for next time
                 let client_clone = self.client.clone();
                 tokio::spawn(async move {
-                    let problems = client_clone
+                    let mut problems = client_clone
                         .get_problem_list()
                         .await
                         .expect("Failed to fetch problem list");
+                    let question_tags = client_clone
+                        .get_topics_question_list()
+                        .await
+                        .expect("Failed to fetch topics list");
+                    for question_tag in question_tags {
+                        question_tag.question_ids.iter().for_each(|question_id| {
+                            if let Some(problem) =
+                                problems.iter_mut().find(|p| p.id == *question_id)
+                            {
+                                problem.topics.push(question_tag.name.clone());
+                            }
+                        });
+                    }
                     let data =
                         serde_json::to_string(&problems).expect("Failed to serialize problem list");
                     fs::write(Picker::get_data_path(), data).expect("Unable to write json to file");
@@ -371,11 +384,23 @@ impl Picker {
                 v
             }
             Err(_) => {
-                let problems = self
+                let mut problems = self
                     .client
                     .get_problem_list()
                     .await
                     .expect("Failed to fetch problem list");
+                let question_tags = self
+                    .client
+                    .get_topics_question_list()
+                    .await
+                    .expect("Failed to fetch topics list");
+                for question_tag in question_tags {
+                    question_tag.question_ids.iter().for_each(|question_id| {
+                        if let Some(problem) = problems.iter_mut().find(|p| p.id == *question_id) {
+                            problem.topics.push(question_tag.name.clone());
+                        }
+                    });
+                }
                 let data =
                     serde_json::to_string(&problems).expect("Failed to serialize problem list");
                 fs::write(Picker::get_data_path(), &data).expect("Unable to write json to file");

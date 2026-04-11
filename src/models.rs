@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Debug)]
 pub struct GraphQLQuery {
     pub query: String,
-    pub variables: serde_json::Value,
+    pub variables: Option<serde_json::Value>,
     #[serde(rename = "operationName")]
     pub operation_name: Option<String>,
 }
@@ -88,6 +88,23 @@ pub struct ProblemSummary {
     pub status: Option<String>,
     pub submitted: u64,
     pub title: String,
+    pub topics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Topic {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct QuestionTopics {
+    pub name: String,
+    pub id: String,
+    pub slug: String,
+    #[serde(rename = "translatedName")]
+    pub translated_name: Option<String>,
+    #[serde(rename = "questionIds")]
+    pub question_ids: Vec<u64>,
 }
 
 // ==========================================
