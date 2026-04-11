@@ -28,6 +28,7 @@ pub struct SelectionScreen {
     pub input: Input,
     pub input_mode: InputMode,
     pub difficulty_filter: Option<u8>,
+    pub previous_key: Option<KeyCode>,
 }
 
 impl Screen for SelectionScreen {
@@ -71,7 +72,7 @@ impl Screen for SelectionScreen {
             None => " Problems ",
         };
 
-        let header_cells = ["ID", "Name", "Acceptance", "Done"]
+        let header_cells = ["ID", "Name", "Acceptance", "Topics", "Done"]
             .into_iter()
             .map(|h| Cell::from(h).style(Style::default().fg(Color::Yellow)));
         let header = Row::new(header_cells).style(Style::default());
@@ -109,7 +110,16 @@ impl Screen for SelectionScreen {
                 _ => Cell::from(done_text).style(Style::default().fg(Color::White)),
             };
 
-            Row::new(vec![id_cell, name_cell, acceptance_cell, done_cell])
+            let slice = p.topics.get(..1).unwrap_or(&p.topics);
+            let topics_cell = Cell::from(slice.join("|"));
+
+            Row::new(vec![
+                id_cell,
+                name_cell,
+                acceptance_cell,
+                topics_cell,
+                done_cell,
+            ])
         });
 
         let table = Table::new(
@@ -118,7 +128,8 @@ impl Screen for SelectionScreen {
                 Constraint::Length(6),
                 Constraint::Percentage(55),
                 Constraint::Min(10),
-                Constraint::Min(1),
+                Constraint::Fill(10),
+                Constraint::Length(6),
             ],
         )
         .header(header)
@@ -169,6 +180,8 @@ impl Screen for SelectionScreen {
                 KeyCode::Char('q') | KeyCode::Esc => return Some(Action::Quit),
                 KeyCode::Down | KeyCode::Char('j') => self.next(),
                 KeyCode::Up | KeyCode::Char('k') => self.previous(),
+                KeyCode::Left | KeyCode::Char('h') => self.table_state.select_next_column(),
+                KeyCode::Right | KeyCode::Char('l') => self.table_state.select_previous_column(),
                 KeyCode::Char('/') => self.input_mode = InputMode::Editing,
                 KeyCode::Enter => {
                     if let Some(i) = self.table_state.selected()
@@ -177,6 +190,22 @@ impl Screen for SelectionScreen {
                         let index = self.filtered_problems[i];
                         return Some(Action::Select(self.all_problems[index].slug.clone()));
                     }
+                }
+                KeyCode::Char('g') => {
+                    if let Some(prev_key) = self.previous_key
+                        && prev_key == KeyCode::Char('g')
+                    {
+                        self.table_state.select(Some(0));
+                    }
+                }
+                KeyCode::Char('G') => {
+                    self.table_state.select_last();
+                }
+                KeyCode::Char('d') => {
+                    self.table_state.scroll_down_by(10);
+                }
+                KeyCode::Char('u') => {
+                    self.table_state.scroll_up_by(10);
                 }
                 KeyCode::Char(c) => {
                     if let Some(number) = c.to_digit(10) {
@@ -213,6 +242,7 @@ impl Screen for SelectionScreen {
                 }
             },
         }
+        self.previous_key = Some(key_event.code);
         None
     }
 }
@@ -232,6 +262,7 @@ impl SelectionScreen {
             input: Input::default(),
             input_mode: InputMode::Normal,
             difficulty_filter: None,
+            previous_key: None,
         }
     }
 

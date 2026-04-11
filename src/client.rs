@@ -1,8 +1,8 @@
 use crate::auth::LeetCodeCredentials;
 use crate::error::{EngineError, Result};
 use crate::models::{
-    GraphQLQuery, Question, SubmissionCheckResult, SubmitPayload, SubmitResponse, TestPayload,
-    TestSubmissionCheckResult, TestSubmitResponse,
+    GraphQLQuery, Question, QuestionTopics, SubmissionCheckResult, SubmitPayload, SubmitResponse,
+    TestPayload, TestSubmissionCheckResult, TestSubmitResponse,
 };
 use reqwest::Client;
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, USER_AGENT};
@@ -99,7 +99,7 @@ impl LeetCodeClient {
         // 2. Construct the payload with the dynamic slug variable
         let query = GraphQLQuery {
             query: query_string.to_string(),
-            variables: json!({ "titleSlug": title_slug }),
+            variables: Some(json!({ "titleSlug": title_slug })),
             operation_name: Some("questionData".to_string()),
         };
 
@@ -303,6 +303,56 @@ impl LeetCodeClient {
         }
     }
 
+    pub async fn get_topics_question_list(&self) -> Result<Vec<crate::models::QuestionTopics>> {
+        let query_string = r#"
+        query questionTopicTags {
+  questionTopicTags {
+    edges {
+      node {
+        id
+        name
+        slug
+        translatedName
+        questionIds
+      }
+    }
+  }
+}
+        "#;
+
+        let query = GraphQLQuery {
+            query: query_string.to_string(),
+            variables: None,
+            operation_name: Some("questionTopicTags".to_string()),
+        };
+
+        // Create a temporary wrapper to handle the nested JSON response
+        // LeetCode returns: { "data": { "question": { ... } } }
+        // Our execute_graphql method strips the "data" layer, so we catch the "question" layer here.
+        #[derive(serde::Deserialize)]
+        struct Something {
+            node: QuestionTopics,
+        }
+        #[derive(serde::Deserialize)]
+        struct Edge {
+            edges: Vec<Something>,
+        }
+        #[derive(serde::Deserialize)]
+        struct QuestionTopicWrapper {
+            #[serde(rename = "questionTopicTags")]
+            question_topic_tags: Edge,
+        }
+
+        let response: QuestionTopicWrapper = self.execute_graphql(query).await?;
+        let response: Vec<QuestionTopics> = response
+            .question_topic_tags
+            .edges
+            .iter()
+            .map(|edge| edge.node.clone())
+            .collect();
+        Ok(response)
+    }
+
     /// Fetches the master list of all LeetCode problems
     pub async fn get_problem_list(&self) -> Result<Vec<crate::models::ProblemSummary>> {
         let url = "https://leetcode.com/api/problems/all/";
@@ -362,6 +412,7 @@ impl LeetCodeClient {
                         submitted,
                         acceptance,
                         status,
+                        topics: Vec::new(),
                     });
                 }
             }

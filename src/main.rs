@@ -19,11 +19,10 @@ use leetrs::{
     picker::Picker,
 };
 
-const VERSION: &str = "1.0.14";
-
 #[derive(Parser, Debug)]
 #[command(name = "leetrs")]
 #[command(about = "A Neovim-integrated LeetCode TUI", long_about = None)]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -57,8 +56,6 @@ enum Commands {
     },
     /// Setup autocomplete for shell
     Completion { shell: Shell },
-    /// Check leetrs version
-    Version,
 }
 
 fn parse_identifier(s: &str) -> Result<Identifier, String> {
@@ -135,7 +132,6 @@ async fn main() -> anyhow::Result<()> {
             language,
             preview,
         }) => {
-            dbg!(language);
             let creds = match LeetCodeCredentials::load() {
                 Some(c) => c,
                 None => {
@@ -192,9 +188,6 @@ async fn main() -> anyhow::Result<()> {
 
             let picker = Picker::new(client);
             picker.submit(file).await;
-        }
-        Some(Commands::Version) => {
-            println!("leetrs {} (beta)", VERSION);
         }
         Some(Commands::Completion { shell }) => {
             let mut cmd = Cli::command();
