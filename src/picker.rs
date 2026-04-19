@@ -1,4 +1,4 @@
-use crate::error::{EngineError, Result};
+use crate::error::EngineError;
 use crate::models::{Identifier, ProblemSummary, UserDetail};
 use crate::{client::LeetCodeClient, models::Language};
 use std::path::Path;
@@ -42,7 +42,7 @@ impl Picker {
         &self,
         identifier: &Identifier,
         language: &Option<Language>,
-    ) -> Result<(String, String)> {
+    ) -> crate::error::Result<(String, String)> {
         let mut language = match language {
             Some(lang) => lang.clone(),
             None => {
@@ -370,19 +370,30 @@ impl Picker {
         }
     }
 
-    pub async fn get_user_data(&self) -> Result<UserDetail> {
+    pub async fn get_user_data(&self) -> crate::error::Result<UserDetail> {
         let data = match fs::read_to_string(Picker::get_user_data_path()) {
-            Ok(v) => v,
+            Ok(v) => {
+                let client = self.client.clone();
+                tokio::spawn(async move {
+                    let result: Result<(), Box<dyn std::error::Error>> = async {
+                        let user_detail = client.get_user_detail().await?;
+                        let data = serde_json::to_string(&user_detail)?;
+                        let _ = fs::write(Picker::get_user_data_path(), &data);
+                        Ok(())
+                    }
+                    .await;
+
+                    // Handle any errors that occurred in the background task
+                    if let Err(e) = result {
+                        eprintln!("Failed to fetch/save user data in background: {}", e);
+                    }
+                });
+                v
+            }
             Err(_) => {
-                let user_detail = self
-                    .client
-                    .get_user_detail()
-                    .await
-                    .expect("Failed to retrieve user details");
-                let data = serde_json::to_string(&user_detail)
-                    .expect("Failed to serialize user_detail list");
-                fs::write(Picker::get_user_data_path(), &data)
-                    .expect("Unable to write user data json to file");
+                let user_detail = self.client.get_user_detail().await?;
+                let data = serde_json::to_string(&user_detail)?;
+                let _ = fs::write(Picker::get_user_data_path(), &data);
                 data
             }
         };

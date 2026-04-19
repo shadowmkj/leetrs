@@ -1,6 +1,6 @@
 [package]
 name = "leetrs"
-version = "1.0.18"
+version = "1.0.19"
 edition = "2024"
 description = "A command-line tool to interact with LeetCode."
 license = "MIT"
@@ -24,6 +24,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.18"
 tokio = { version = "1.51.1", features = ["full"] }
+toml = "1.1.2"
 tui-input = "0.15.1"
 
 # The profile that 'dist' will build with

@@ -193,11 +193,19 @@ impl Screen for SelectionScreen {
                 let index = self.filtered_problems[i];
                 let selected_problem = &self.all_problems[index];
                 if let Some(user) = &self.user_detail {
-                    if selected_problem.is_paid && !user.is_premium {
+                    if let Some(is_premium) = user.is_premium
+                        && selected_problem.is_paid
+                        && !is_premium
+                    {
                         return Some(Action::ShowMessage(
                             "This problem is premium. please subscribe to access it.".to_string(),
                         ));
                     }
+                } else if selected_problem.is_paid {
+                    return Some(Action::ShowMessage(
+                        "This problem is premium. please login to access it. (use `leetrs auth`"
+                            .to_string(),
+                    ));
                 }
 
                 return Some(Action::Select(self.all_problems[index].slug.clone()));

@@ -130,7 +130,7 @@ async fn run_app<B: Backend>(
                     .direction(ratatui::layout::Direction::Vertical)
                     .constraints([Constraint::Percentage(80), Constraint::Percentage(20)].as_ref())
                     .split(centered_area);
-                let popup_block = Block::bordered().title("Popup");
+                let popup_block = Block::bordered().title("Alert");
                 let paragraph = Paragraph::new(popup_message.as_str()).block(popup_block);
                 f.render_widget(paragraph, layout[0]);
                 let hint = Paragraph::new("Press Enter or Esc to close");

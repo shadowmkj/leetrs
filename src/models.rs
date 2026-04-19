@@ -67,9 +67,9 @@ pub struct QuestionSnippet {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserDetail {
-    pub username: String,
+    pub username: Option<String>,
     #[serde(rename = "isPremium")]
-    pub is_premium: bool,
+    pub is_premium: Option<bool>,
     #[serde(rename = "isVerified")]
     pub is_verified: bool,
 }
