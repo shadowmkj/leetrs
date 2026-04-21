@@ -1,3 +1,4 @@
+
 # 🚀 leetrs
 
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
@@ -9,6 +10,8 @@
 **leetrs** is a blazing-fast, Rust-powered CLI engine that makes solving LeetCode problems from the terminal a first-class developer experience.
 
 Built specifically for developers who live in the terminal and rely on **Neovim**, `leetrs` strips away the distraction of the browser. It handles intelligent authentication, Markdown problem generation, native editor window splitting, and asynchronous code submission without ever leaving your workflow.
+
+https://github.com/user-attachments/assets/86783e7e-afc6-449a-828b-c29e34fa9dbb
 
 ---
 
