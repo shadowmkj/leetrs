@@ -1,3 +1,7 @@
+//! The main problem-selection screen shown when the TUI starts.
+//!
+//! Implements fuzzy search, difficulty filtering, Vim-style navigation, and
+//! premium-problem gating via the [`Screen`] trait.
 use std::rc::Rc;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -15,19 +19,26 @@ use crate::{
     models::{ProblemSummary, UserDetail},
     tui::{Action, screen::Screen},
 };
+/// Keyboard input mode for the selection screen.
 pub enum InputMode {
     Editing,
     Normal,
 }
 
+/// The problem-list screen: a searchable, filterable table of all problems.
 pub struct SelectionScreen {
+    /// The full, immutable problem list shared with [`App`].
     pub all_problems: Rc<[ProblemSummary]>,
+    /// Indices into `all_problems` that survive the current search/filter.
     pub filtered_problems: Vec<usize>,
     pub table_state: TableState,
     pub selected_problem: Option<String>,
+    /// Current contents of the search input box.
     pub input: Input,
     pub input_mode: InputMode,
+    /// Active difficulty filter (`1`/`2`/`3`), or `None` for all.
     pub difficulty_filter: Option<u8>,
+    /// Tracks the previous key for `gg` (jump-to-top) detection.
     pub previous_key: Option<KeyCode>,
     pub user_detail: Option<UserDetail>,
 }
@@ -329,6 +340,8 @@ impl SelectionScreen {
         self.table_state.select(Some(i));
     }
 
+    /// Sets the difficulty filter and re-applies it to `filtered_problems`.
+    /// Passing `4` (or any value > 3) clears the filter.
     pub fn switch_difficulty(&mut self, difficulty: u8) {
         if difficulty > 0 && difficulty < 4 {
             self.difficulty_filter = Some(difficulty)
@@ -338,6 +351,8 @@ impl SelectionScreen {
         self.filter_problems();
     }
 
+    /// Rebuilds `filtered_problems` based on the current difficulty filter,
+    /// or resets it to all indices when no filter is active.
     pub fn filter_problems(&mut self) {
         self.filtered_problems = match self.difficulty_filter {
             Some(difficulty) => self
@@ -351,6 +366,8 @@ impl SelectionScreen {
         }
     }
 
+    /// Re-runs fuzzy search against `all_problems` (respecting the active
+    /// difficulty filter) and sorts matches by descending score.
     pub fn update_search(&mut self) {
         let query = self.input.value();
         if query.is_empty() {

@@ -1,3 +1,8 @@
+//! Authenticated HTTP client for the LeetCode API.
+//!
+//! All requests (REST and GraphQL) are made through [`LeetCodeClient`], which
+//! pre-loads the required auth headers once at construction time so individual
+//! methods don't have to deal with credential handling.
 use crate::auth::LeetCodeCredentials;
 use crate::error::{EngineError, Result};
 use crate::models::{
@@ -8,12 +13,18 @@ use reqwest::Client;
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue, USER_AGENT};
 use serde_json::json;
 
+/// A configured `reqwest` HTTP client that authenticates every request with
+/// the user's LeetCode session cookies and CSRF token.
+///
+/// Construct once with [`LeetCodeClient::new`] and share via clone or `Rc`.
 #[derive(Clone, Debug)]
 pub struct LeetCodeClient {
     http_client: Client,
 }
 
 impl LeetCodeClient {
+    /// Builds a new client, baking the session cookie and CSRF token directly
+    /// into the default headers of every subsequent request.
     pub fn new(creds: LeetCodeCredentials) -> Result<Self> {
         let mut headers = HeaderMap::new();
 
@@ -46,6 +57,11 @@ impl LeetCodeClient {
         })
     }
 
+    /// Sends a GraphQL query to LeetCode and deserialises the `data` field of
+    /// the response into `T`.
+    ///
+    /// Consumes the `GraphQLQuery` struct and handles both HTTP-level errors
+    /// and LeetCode-level GraphQL errors (`{ "errors": [...] }`).
     pub async fn execute_graphql<T: serde::de::DeserializeOwned>(
         &self,
         query: GraphQLQuery,
@@ -303,6 +319,7 @@ impl LeetCodeClient {
         }
     }
 
+    /// Fetches the current user's profile via the `userStatus` GraphQL query.
     pub async fn get_user_detail(&self) -> Result<UserDetail> {
         let query_string = r#"
                 query {
@@ -330,6 +347,10 @@ impl LeetCodeClient {
         Ok(response.user_status)
     }
 
+    /// Fetches all topic tags along with the set of problem IDs tagged under each.
+    ///
+    /// The response is deeply nested (`questionTopicTags > edges > node`); local
+    /// wrapper structs are used to drive serde without polluting the public API.
     pub async fn get_topics_question_list(&self) -> Result<Vec<crate::models::QuestionTopics>> {
         let query_string = r#"
         query questionTopicTags {

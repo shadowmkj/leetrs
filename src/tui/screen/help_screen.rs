@@ -1,3 +1,4 @@
+//! Help screen showing all keybindings in a formatted two-column list.
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,

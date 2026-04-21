@@ -1,3 +1,8 @@
+//! ratatui TUI runtime for leetrs.
+//!
+//! Provides the interactive problem browser. The top-level entry point is
+//! [`run_tui`], which owns the terminal setup/teardown and re-opens the TUI
+//! after Neovim closes so the user can pick another problem without restarting.
 pub mod screen;
 mod utils;
 
@@ -21,6 +26,7 @@ use std::{io, rc::Rc};
 
 use crate::models::{Identifier, Language, ProblemSummary, UserDetail};
 
+/// Which tab is currently displayed.
 #[derive(Default)]
 pub enum Tab {
     #[default]
@@ -29,21 +35,29 @@ pub enum Tab {
 }
 
 /// Holds the state of the application
+/// Top-level application state shared across a single TUI session.
 pub struct App {
     pub should_quit: bool,
+    /// The full, shared problem list (reference-counted to avoid copying).
     pub problems: Rc<[ProblemSummary]>,
     pub tab: Tab,
     pub selection_screen: SelectionScreen,
     pub help_screen: HelpScreen,
+    /// Slug of the problem the user pressed Enter on, if any.
     pub selected_problem: Option<String>,
     pub user_detail: Option<UserDetail>,
+    /// One-shot message shown in a modal popup until dismissed.
     pub popup_message: Option<String>,
 }
 
+/// Actions that a [`Screen`] can return to the main event loop.
 pub enum Action {
     Quit,
+    /// The user selected a problem; carries its slug.
     Select(String),
+    /// Display a one-shot modal popup with the given message.
     ShowMessage(String),
+    /// Open the given URL in the system browser.
     Open(String),
 }
 
@@ -75,6 +89,11 @@ impl App {
 }
 
 /// The main entry point for the TUI
+/// Initialises [`App`], then enters the TUI event loop.
+///
+/// After the user selects a problem the terminal is restored, Neovim is
+/// launched, and the TUI is re-entered so the user can pick another problem
+/// without restarting the process.
 pub async fn run_tui(
     problems: Rc<[ProblemSummary]>,
     picker: Picker,
@@ -109,6 +128,10 @@ pub async fn run_tui(
 }
 
 /// The Event Loop
+/// Drives rendering and keyboard events for a single TUI session.
+///
+/// Returns `Ok(Some(slug))` when the user selects a problem, `Ok(None)` when
+/// they quit, and `Err` on I/O failure.
 async fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,

@@ -1,9 +1,15 @@
+//! Shared rendering helpers for TUI screens.
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
     widgets::ListItem,
 };
 
+/// Creates a [`ListItem`] with a left-aligned label and a right-aligned label,
+/// separated by enough padding to fill `area_width` columns.
+///
+/// Used by [`super::screen::help_screen::HelpScreen`] to render the keybinding
+/// table with consistent alignment regardless of terminal width.
 pub fn create_split_item(
     left: &str,
     right: &str,

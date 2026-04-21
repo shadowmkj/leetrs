@@ -1,3 +1,7 @@
+//! `leetrs` — binary entry point.
+//!
+//! Parses CLI arguments with Clap and dispatches to the appropriate handler.
+//! All heavy lifting (HTTP, TUI, file I/O) lives in the library crate.
 use std::{
     fs::{self},
     io,
@@ -58,6 +62,7 @@ enum Commands {
     Completion { shell: Shell },
 }
 
+/// Parses a CLI identifier argument as either a numeric problem ID or a slug string.
 fn parse_identifier(s: &str) -> Result<Identifier, String> {
     if let Ok(num) = s.parse::<u64>() {
         Ok(Identifier::Number(num))
@@ -191,7 +196,6 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Completion { shell }) => {
             let mut cmd = Cli::command();
-
             match shell {
                 Shell::Bash => generate(Bash, &mut cmd, "leetrs", &mut io::stdout()),
                 Shell::Zsh => generate(Zsh, &mut cmd, "leetrs", &mut io::stdout()),
@@ -207,6 +211,11 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Resolves and writes the problem files, then opens Neovim with the description
+/// and code side-by-side in a vertical split.
+///
+/// When `preview` is true the Markdown description is printed to stdout
+/// instead of opening an editor.
 pub async fn pick_and_open(
     picker: &Picker,
     identifier: &Identifier,
@@ -246,6 +255,7 @@ pub async fn pick_and_open(
     }
 }
 
+/// Fetches the full problem list and user data, then launches the interactive TUI.
 async fn open_tui() {
     let creds = leetrs::auth::LeetCodeCredentials::load().expect("Please run `leetrs auth` first.");
     let client = leetrs::client::LeetCodeClient::new(creds).expect("Failed to init client");
