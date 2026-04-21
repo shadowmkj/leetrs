@@ -1,0 +1,38 @@
+name: 🚀 Feature Request
+description: Suggest an idea or improvement for leetrs.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Got an idea? Describe it clearly and we'll consider it for a future release.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What pain point does this address? Why is it needed?
+      placeholder: "e.g. There's no way to browse the problem list interactively — I always have to know the slug in advance."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should this work from the user's perspective?
+      placeholder: "e.g. A `leetrs list` command that opens a fuzzy-searchable TUI of all problems."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought of?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links, or anything else that helps explain the request.

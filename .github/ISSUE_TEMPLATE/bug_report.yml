@@ -1,0 +1,71 @@
+name: 🐛 Bug Report
+description: Something isn't working as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+      placeholder: "e.g. `leetrs submit` always returns a network error even with valid credentials."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reliably trigger the bug.
+      placeholder: |
+        1. Run `leetrs auth`
+        2. Run `leetrs pick two-sum`
+        3. Run `leetrs submit two_sum.rs`
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: "e.g. The submission result should print to the terminal."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output / logs
+      description: Paste any terminal output here. This is automatically formatted as code.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: leetrs version
+      placeholder: "e.g. 1.0.19  (run `leetrs --version`)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows (WSL)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: rust_version
+    attributes:
+      label: Rust version (if built from source)
+      placeholder: "e.g. rustc 1.78.0  (run `rustc --version`)"
