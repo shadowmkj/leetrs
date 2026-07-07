@@ -19,6 +19,7 @@ use dialoguer::{Select, theme::ColorfulTheme};
 use leetrs::{
     auth::{LeetCodeCredentials, auto_extract_flow, manual_auth_flow},
     client::LeetCodeClient,
+    config::{CONFIG, Config},
     models::{Identifier, Language, ProblemSummary},
     picker::Picker,
 };
@@ -74,6 +75,10 @@ fn parse_identifier(s: &str) -> Result<Identifier, String> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    let config = Config::new().expect("Error parsing config file");
+
+    CONFIG.set(config).expect("Config already initialized");
+
     match &cli.command {
         Some(Commands::Auth) => {
             println!("🔒 LeetCode Authentication\n");
@@ -113,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Some(Commands::Tui {language}) => open_tui(language).await,
+        Some(Commands::Tui { language }) => open_tui(language).await,
         Some(Commands::Status) => {
             match LeetCodeCredentials::load() {
                 Some(creds) => {

@@ -1,6 +1,6 @@
 [package]
 name = "leetrs"
-version = "1.0.19"
+version = "1.0.20"
 edition = "2024"
 description = "A command-line tool to interact with LeetCode."
 license = "MIT"
@@ -32,6 +32,6 @@ tui-input = "0.15.1"
 inherits = "release"
 codegen-units = 1
 lto = true
-opt-level = "s" 
-strip = true 
+opt-level = "s"
+strip = true
 

@@ -33,6 +33,19 @@ pub enum Identifier {
     String(String),
 }
 
+impl From<&String> for Language {
+    fn from(value: &String) -> Self {
+        match value.as_str() {
+            "python3" => Self::Python,
+            "rust" => Self::Rust,
+            "pythondata" => Self::Pandas,
+            "mysql" => Self::Mysql,
+            "postgresql" => Self::Postgres,
+            _ => Self::Mysql,
+        }
+    }
+}
+
 impl From<String> for Language {
     fn from(value: String) -> Self {
         match value.as_str() {
@@ -253,7 +266,10 @@ mod tests {
 
     #[test]
     fn language_from_python3_slug() {
-        assert!(matches!(Language::from("python3".to_string()), Language::Python));
+        assert!(matches!(
+            Language::from("python3".to_string()),
+            Language::Python
+        ));
     }
 
     #[test]
@@ -263,25 +279,40 @@ mod tests {
 
     #[test]
     fn language_from_pythondata_slug() {
-        assert!(matches!(Language::from("pythondata".to_string()), Language::Pandas));
+        assert!(matches!(
+            Language::from("pythondata".to_string()),
+            Language::Pandas
+        ));
     }
 
     #[test]
     fn language_from_mysql_slug() {
-        assert!(matches!(Language::from("mysql".to_string()), Language::Mysql));
+        assert!(matches!(
+            Language::from("mysql".to_string()),
+            Language::Mysql
+        ));
     }
 
     #[test]
     fn language_from_postgresql_slug() {
-        assert!(matches!(Language::from("postgresql".to_string()), Language::Postgres));
+        assert!(matches!(
+            Language::from("postgresql".to_string()),
+            Language::Postgres
+        ));
     }
 
     /// Unknown slugs must fall back to Mysql rather than panicking.
     #[test]
     fn language_from_unknown_slug_falls_back_to_mysql() {
-        assert!(matches!(Language::from("javascript".to_string()), Language::Mysql));
+        assert!(matches!(
+            Language::from("javascript".to_string()),
+            Language::Mysql
+        ));
         assert!(matches!(Language::from("".to_string()), Language::Mysql));
-        assert!(matches!(Language::from("PYTHON3".to_string()), Language::Mysql)); // case-sensitive
+        assert!(matches!(
+            Language::from("PYTHON3".to_string()),
+            Language::Mysql
+        )); // case-sensitive
     }
 
     // -----------------------------------------------------------------------

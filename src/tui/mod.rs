@@ -6,6 +6,7 @@
 pub mod screen;
 mod utils;
 
+use crate::config::CONFIG;
 use crate::tui::screen::selection_screen::{InputMode, SelectionScreen};
 use crate::{picker::Picker, tui::screen::help_screen::HelpScreen};
 use crossterm::{
@@ -218,11 +219,25 @@ pub async fn pick_and_open_nvim(
     if let Ok((code, desc)) = picker.pick(identifier, language).await {
         // 4. launch neovim with a vertical split
         println!("🚀 launching neovim...");
-        let status = Command::new("nvim")
-            .arg(&desc)
-            .arg("-c")
-            .arg(format!("vsplit {}", code)) // Force a vertical split with the code file
-            .status();
+        let config = CONFIG.get().expect("Failed to initialise config");
+        let status;
+        if let Some(value) = &config.show_description {
+            if *value == true {
+                status = Command::new("nvim")
+                    .arg(&desc)
+                    .arg("-c")
+                    .arg(format!("vsplit {}", code)) // Force a vertical split with the code file
+                    .status();
+            } else {
+                status = Command::new("nvim").arg(code).status();
+            }
+        } else {
+            status = Command::new("nvim")
+                .arg(&desc)
+                .arg("-c")
+                .arg(format!("vsplit {}", code)) // Force a vertical split with the code file
+                .status();
+        }
 
         match status {
             Ok(exit_status) if exit_status.success() => {
