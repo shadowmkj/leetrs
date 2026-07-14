@@ -46,7 +46,7 @@ impl Screen for HelpScreen {
                 "Start searching problems",
                 Color::Green,
                 help_area.width,
-            ), 
+            ),
             create_split_item(
                 "t",
                 "Open topic-filter overlay (multi-select)",

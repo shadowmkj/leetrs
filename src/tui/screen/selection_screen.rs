@@ -12,7 +12,9 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::Span,
-    widgets::{Block, Borders, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, TableState},
+    widgets::{
+        Block, Borders, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, TableState,
+    },
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
@@ -70,7 +72,11 @@ impl TopicFilterState {
             return;
         }
         let i = self.cursor();
-        let next = if i >= self.all_topics.len() - 1 { 0 } else { i + 1 };
+        let next = if i >= self.all_topics.len() - 1 {
+            0
+        } else {
+            i + 1
+        };
         self.list_state.select(Some(next));
     }
 
@@ -79,7 +85,11 @@ impl TopicFilterState {
             return;
         }
         let i = self.cursor();
-        let prev = if i == 0 { self.all_topics.len() - 1 } else { i - 1 };
+        let prev = if i == 0 {
+            self.all_topics.len() - 1
+        } else {
+            i - 1
+        };
         self.list_state.select(Some(prev));
     }
 
@@ -264,18 +274,15 @@ impl Screen for SelectionScreen {
 
         if let InputMode::Normal = self.input_mode {
             frame.render_widget(
-                Paragraph::new(
-                    "1: Easy  2: Medium  3: Hard  4: All  |  t: Topic filter",
-                )
-                .style(Style::default().fg(Color::DarkGray)),
+                Paragraph::new("1: Easy  2: Medium  3: Hard  4: All  |  t: Topic filter")
+                    .style(Style::default().fg(Color::DarkGray)),
                 bottom_bar[1],
             );
         }
 
         // Active topic status line (row 2)
         let topic_status_widget = if self.topic_filter.selected_topics.is_empty() {
-            Paragraph::new("Press ? to view help.")
-                .style(Style::default().fg(Color::DarkGray))
+            Paragraph::new("Press ? to view help.").style(Style::default().fg(Color::DarkGray))
         } else {
             let mut names: Vec<&str> = self
                 .topic_filter
@@ -431,7 +438,13 @@ impl SelectionScreen {
             return;
         }
         let i = match self.table_state.selected() {
-            Some(i) => if i >= len - 1 { 0 } else { i + 1 },
+            Some(i) => {
+                if i >= len - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
             None => 0,
         };
         self.table_state.select(Some(i));
@@ -444,7 +457,13 @@ impl SelectionScreen {
             return;
         }
         let i = match self.table_state.selected() {
-            Some(i) => if i == 0 { len - 1 } else { i - 1 },
+            Some(i) => {
+                if i == 0 {
+                    len - 1
+                } else {
+                    i - 1
+                }
+            }
             None => 0,
         };
         self.table_state.select(Some(i));
@@ -493,7 +512,9 @@ impl SelectionScreen {
                 .filter_map(|idx| {
                     let p = &self.all_problems[idx];
                     let target = format!("{} {}", p.title, p.id);
-                    matcher.fuzzy_match(&target, &query).map(|score| (score, idx))
+                    matcher
+                        .fuzzy_match(&target, &query)
+                        .map(|score| (score, idx))
                 })
                 .collect();
             matched.sort_by(|a, b| b.0.cmp(&a.0));
@@ -591,8 +612,7 @@ impl SelectionScreen {
                     } else {
                         ("[ ] ", Color::White)
                     };
-                    ListItem::new(format!("{}{}", prefix, t))
-                        .style(Style::default().fg(color))
+                    ListItem::new(format!("{}{}", prefix, t)).style(Style::default().fg(color))
                 })
                 .collect();
 
