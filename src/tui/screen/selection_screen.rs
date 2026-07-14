@@ -1,7 +1,8 @@
 //! The main problem-selection screen shown when the TUI starts.
 //!
-//! Implements fuzzy search, difficulty filtering, Vim-style navigation, and
-//! premium-problem gating via the [`Screen`] trait.
+//! Implements fuzzy search, difficulty filtering, topic filtering, Vim-style
+//! navigation, and premium-problem gating via the [`Screen`] trait.
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
@@ -11,7 +12,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     text::Span,
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Cell, Clear, List, ListItem, ListState, Paragraph, Row, Table, TableState},
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
@@ -19,10 +20,83 @@ use crate::{
     models::{ProblemSummary, UserDetail},
     tui::{Action, screen::Screen},
 };
+
 /// Keyboard input mode for the selection screen.
 pub enum InputMode {
     Editing,
     Normal,
+    TopicFilter,
+}
+
+/// State for the topic-filter overlay.
+pub struct TopicFilterState {
+    /// Sorted list of all unique topic names derived from the loaded problem set.
+    pub all_topics: Vec<String>,
+    /// Topics currently selected by the user (OR semantics: problem must have at least one).
+    pub selected_topics: HashSet<String>,
+    /// Drives the scroll position in the overlay list widget.
+    pub list_state: ListState,
+}
+
+impl TopicFilterState {
+    pub fn new(problems: &[ProblemSummary]) -> Self {
+        let mut set = HashSet::new();
+        for p in problems.iter() {
+            for t in &p.topics {
+                set.insert(t.clone());
+            }
+        }
+        let mut all_topics: Vec<String> = set.into_iter().collect();
+        all_topics.sort();
+
+        let mut list_state = ListState::default();
+        if !all_topics.is_empty() {
+            list_state.select(Some(0));
+        }
+
+        Self {
+            all_topics,
+            selected_topics: HashSet::new(),
+            list_state,
+        }
+    }
+
+    fn cursor(&self) -> usize {
+        self.list_state.selected().unwrap_or(0)
+    }
+
+    pub fn next(&mut self) {
+        if self.all_topics.is_empty() {
+            return;
+        }
+        let i = self.cursor();
+        let next = if i >= self.all_topics.len() - 1 { 0 } else { i + 1 };
+        self.list_state.select(Some(next));
+    }
+
+    pub fn previous(&mut self) {
+        if self.all_topics.is_empty() {
+            return;
+        }
+        let i = self.cursor();
+        let prev = if i == 0 { self.all_topics.len() - 1 } else { i - 1 };
+        self.list_state.select(Some(prev));
+    }
+
+    pub fn toggle_current(&mut self) {
+        let cursor = self.cursor();
+        if let Some(topic) = self.all_topics.get(cursor).cloned() {
+            if self.selected_topics.contains(&topic) {
+                self.selected_topics.remove(&topic);
+            } else {
+                self.selected_topics.insert(topic);
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.selected_topics.clear();
+    }
 }
 
 /// The problem-list screen: a searchable, filterable table of all problems.
@@ -41,6 +115,8 @@ pub struct SelectionScreen {
     /// Tracks the previous key for `gg` (jump-to-top) detection.
     pub previous_key: Option<KeyCode>,
     pub user_detail: Option<UserDetail>,
+    /// State for the topic-filter overlay.
+    pub topic_filter: TopicFilterState,
 }
 
 impl Screen for SelectionScreen {
@@ -51,7 +127,7 @@ impl Screen for SelectionScreen {
             .constraints([
                 Constraint::Length(3),
                 Constraint::Min(1),
-                Constraint::Length(2),
+                Constraint::Length(3),
             ])
             .split(frame.area());
 
@@ -59,7 +135,7 @@ impl Screen for SelectionScreen {
         let input_widget = Paragraph::new(self.input.value())
             .style(match self.input_mode {
                 InputMode::Editing => Style::default().fg(Color::Yellow),
-                InputMode::Normal => Style::default(),
+                _ => Style::default(),
             })
             .block(Block::default().borders(Borders::ALL).title(title));
 
@@ -74,15 +150,7 @@ impl Screen for SelectionScreen {
             ));
         }
 
-        let title = match self.difficulty_filter {
-            Some(v) => match v {
-                1 => " Problems (Easy)",
-                2 => " Problems (Medium)",
-                3 => " Problems (Hard)",
-                _ => " Problems ",
-            },
-            None => " Problems ",
-        };
+        let table_title = self.build_table_title();
 
         let header_cells = ["ID", "Name", "Acceptance", "Topics", "Premium?", "Done"]
             .into_iter()
@@ -109,8 +177,8 @@ impl Screen for SelectionScreen {
             let acceptance_cell = Cell::from(acceptance_text);
             let done_text = if let Some(status) = &p.status {
                 match status.as_str() {
-                    "ac" => "",
-                    "notac" => "",
+                    "ac" => "\u{f00c}",
+                    "notac" => "\u{eabc}",
                     _ => "",
                 }
             } else {
@@ -118,7 +186,7 @@ impl Screen for SelectionScreen {
             };
 
             let done_cell = match done_text {
-                "" => Cell::from(done_text).style(Style::default().fg(Color::Green)),
+                "\u{f00c}" => Cell::from(done_text).style(Style::default().fg(Color::Green)),
                 _ => Cell::from(done_text).style(Style::default().fg(Color::White)),
             };
 
@@ -154,22 +222,27 @@ impl Screen for SelectionScreen {
             ],
         )
         .header(header)
-        .block(Block::default().title(title).borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title(table_title.as_str())
+                .borders(Borders::ALL),
+        )
         .row_highlight_style(Style::default().bg(Color::DarkGray).fg(Color::White))
         .highlight_symbol(">> ");
 
         frame.render_stateful_widget(table, chunks[1], &mut self.table_state);
 
+        // Bottom status bar (3 single-line rows)
         let bottom_bar = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),
-                Constraint::Length(2),
-                Constraint::Length(2),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(chunks[2]);
 
-        let instructions = match self.input_mode {
+        let (instruction_text, instruction_style) = match self.input_mode {
             InputMode::Normal => (
                 "Press '/' to search, 'j'/'k' to scroll, 'Enter' to select, 'o' to open in \
                 browser, 'q' to quit.",
@@ -179,24 +252,63 @@ impl Screen for SelectionScreen {
                 "Type to filter, press 'Esc' to return to list, press 'Enter' to select.",
                 Style::default().fg(Color::Yellow),
             ),
+            InputMode::TopicFilter => (
+                "j/k: navigate   Space: toggle   c: clear all   Esc/Enter: close",
+                Style::default().fg(Color::Cyan),
+            ),
         };
-        let instructions = Paragraph::new(instructions.0).style(instructions.1);
-        frame.render_widget(instructions, bottom_bar[0]);
+        frame.render_widget(
+            Paragraph::new(instruction_text).style(instruction_style),
+            bottom_bar[0],
+        );
 
         if let InputMode::Normal = self.input_mode {
-            let filter_hint = Paragraph::new(
-                "Press to filter based on difficulty => 1: Easy, 2: Medium, 3: Hard, 4: All ",
-            )
-            .style(Style::default().fg(Color::DarkGray));
-            frame.render_widget(filter_hint, bottom_bar[1]);
+            frame.render_widget(
+                Paragraph::new(
+                    "1: Easy  2: Medium  3: Hard  4: All  |  t: Topic filter",
+                )
+                .style(Style::default().fg(Color::DarkGray)),
+                bottom_bar[1],
+            );
         }
 
-        let help_hint =
-            Paragraph::new("Press ? to view help.").style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(help_hint, bottom_bar[2]);
+        // Active topic status line (row 2)
+        let topic_status_widget = if self.topic_filter.selected_topics.is_empty() {
+            Paragraph::new("Press ? to view help.")
+                .style(Style::default().fg(Color::DarkGray))
+        } else {
+            let mut names: Vec<&str> = self
+                .topic_filter
+                .selected_topics
+                .iter()
+                .map(|s| s.as_str())
+                .collect();
+            names.sort();
+            let display = if names.len() <= 3 {
+                format!("Topics: {}", names.join(", "))
+            } else {
+                format!(
+                    "Topics: {}, ... (+{} more)",
+                    names[..2].join(", "),
+                    names.len() - 2
+                )
+            };
+            Paragraph::new(display).style(Style::default().fg(Color::Cyan))
+        };
+        frame.render_widget(topic_status_widget, bottom_bar[2]);
+
+        // Render topic-filter overlay on top of everything else
+        if let InputMode::TopicFilter = self.input_mode {
+            self.render_topic_overlay(frame);
+        }
     }
 
     fn event_loop(&mut self, key_event: &KeyEvent) -> Option<Action> {
+        // Topic filter overlay intercepts all keys while active
+        if let InputMode::TopicFilter = self.input_mode {
+            return self.handle_topic_filter_key(key_event);
+        }
+
         if let KeyCode::Enter = key_event.code {
             if let Some(i) = self.table_state.selected()
                 && !self.filtered_problems.is_empty()
@@ -231,14 +343,14 @@ impl Screen for SelectionScreen {
                 KeyCode::Left | KeyCode::Char('h') => self.table_state.select_next_column(),
                 KeyCode::Right | KeyCode::Char('l') => self.table_state.select_previous_column(),
                 KeyCode::Char('/') => self.input_mode = InputMode::Editing,
+                KeyCode::Char('t') => self.input_mode = InputMode::TopicFilter,
                 KeyCode::Char('o') => {
                     if let Some(i) = self.table_state.selected()
                         && !self.filtered_problems.is_empty()
                     {
                         let index = self.filtered_problems[i];
                         let selected = &self.all_problems[index];
-                        let selected = &selected.slug;
-                        let url = format!("https://leetcode.com/problems/{}", selected);
+                        let url = format!("https://leetcode.com/problems/{}", selected.slug);
                         self.input_mode = InputMode::Normal;
                         return Some(Action::Open(url));
                     }
@@ -279,12 +391,11 @@ impl Screen for SelectionScreen {
                 }
                 _ => {
                     self.input.handle_event(&Event::Key(*key_event));
-                    if let Some(diff) = self.difficulty_filter {
-                        self.switch_difficulty(diff);
-                    }
-                    self.update_search();
+                    self.apply_filters();
                 }
             },
+
+            InputMode::TopicFilter => unreachable!(),
         }
         self.previous_key = Some(key_event.code);
         None
@@ -298,9 +409,12 @@ impl SelectionScreen {
             list_state.select(Some(0)); // Start by highlighting the first item
         }
 
+        let topic_filter = TopicFilterState::new(&problems);
+
         Self {
             selected_problem: None,
             filtered_problems: (0..problems.len()).collect(),
+            topic_filter,
             all_problems: problems,
             table_state: list_state,
             input: Input::default(),
@@ -312,14 +426,12 @@ impl SelectionScreen {
     }
 
     pub fn next(&mut self) {
+        let len = self.filtered_problems.len();
+        if len == 0 {
+            return;
+        }
         let i = match self.table_state.selected() {
-            Some(i) => {
-                if i >= self.all_problems.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) => if i >= len - 1 { 0 } else { i + 1 },
             None => 0,
         };
         self.table_state.select(Some(i));
@@ -327,66 +439,67 @@ impl SelectionScreen {
 
     // Move cursor up
     pub fn previous(&mut self) {
+        let len = self.filtered_problems.len();
+        if len == 0 {
+            return;
+        }
         let i = match self.table_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.all_problems.len() - 1
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => if i == 0 { len - 1 } else { i - 1 },
             None => 0,
         };
         self.table_state.select(Some(i));
     }
 
-    /// Sets the difficulty filter and re-applies it to `filtered_problems`.
-    /// Passing `4` (or any value > 3) clears the filter.
+    /// Sets the difficulty filter and re-applies all active filters.
+    /// Passing `4` (or any value > 3) clears the difficulty filter.
     pub fn switch_difficulty(&mut self, difficulty: u8) {
         if difficulty > 0 && difficulty < 4 {
-            self.difficulty_filter = Some(difficulty)
+            self.difficulty_filter = Some(difficulty);
         } else {
             self.difficulty_filter = None;
         }
-        self.filter_problems();
+        self.apply_filters();
     }
 
-    /// Rebuilds `filtered_problems` based on the current difficulty filter,
-    /// or resets it to all indices when no filter is active.
-    pub fn filter_problems(&mut self) {
-        self.filtered_problems = match self.difficulty_filter {
-            Some(difficulty) => self
-                .all_problems
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| p.difficulty == difficulty)
-                .map(|(i, _)| i)
-                .collect(),
-            None => (0..self.all_problems.len()).collect(),
+    /// Rebuilds `filtered_problems` by applying difficulty, topic, and fuzzy-search
+    /// filters in a single pass. Replaces the old separate `filter_problems` /
+    /// `update_search` pair and fixes the bug where clearing search ignored the
+    /// active difficulty filter.
+    pub fn apply_filters(&mut self) {
+        let mut indices: Vec<usize> = (0..self.all_problems.len()).collect();
+
+        // 1. Difficulty filter
+        if let Some(diff) = self.difficulty_filter {
+            indices.retain(|&i| self.all_problems[i].difficulty == diff);
         }
-    }
 
-    /// Re-runs fuzzy search against `all_problems` (respecting the active
-    /// difficulty filter) and sorts matches by descending score.
-    pub fn update_search(&mut self) {
-        let query = self.input.value();
-        if query.is_empty() {
-            self.filtered_problems = (0..self.all_problems.len()).collect();
-        } else {
+        // 2. Topic filter (OR: problem needs at least one of the selected topics)
+        if !self.topic_filter.selected_topics.is_empty() {
+            indices.retain(|&i| {
+                let problem_topics = &self.all_problems[i].topics;
+                self.topic_filter
+                    .selected_topics
+                    .iter()
+                    .any(|t| problem_topics.contains(t))
+            });
+        }
+
+        // 3. Fuzzy search on remaining candidates
+        let query = self.input.value().to_string();
+        if !query.is_empty() {
             let matcher = SkimMatcherV2::default();
-            let mut matched: Vec<(i64, usize)> = Vec::new();
-            for (idx, problem) in self.all_problems.iter().enumerate() {
-                if !self.filtered_problems.contains(&idx) {
-                    continue;
-                }
-                let search_target = format!("{} {}", problem.title, problem.id);
-                if let Some(score) = matcher.fuzzy_match(&search_target, query) {
-                    matched.push((score, idx));
-                }
-            }
-
+            let mut matched: Vec<(i64, usize)> = indices
+                .into_iter()
+                .filter_map(|idx| {
+                    let p = &self.all_problems[idx];
+                    let target = format!("{} {}", p.title, p.id);
+                    matcher.fuzzy_match(&target, &query).map(|score| (score, idx))
+                })
+                .collect();
             matched.sort_by(|a, b| b.0.cmp(&a.0));
-            self.filtered_problems = matched.into_iter().map(|(_, p)| p).collect();
+            self.filtered_problems = matched.into_iter().map(|(_, i)| i).collect();
+        } else {
+            self.filtered_problems = indices;
         }
 
         //NOTE: Reset the cursor to 0 when the list changes so we don't panic out of bounds
@@ -395,5 +508,137 @@ impl SelectionScreen {
         } else {
             self.table_state.select(None);
         }
+    }
+
+    /// Thin wrapper kept for compatibility — delegates to [`apply_filters`].
+    pub fn filter_problems(&mut self) {
+        self.apply_filters();
+    }
+
+    /// Thin wrapper kept for compatibility — delegates to [`apply_filters`].
+    pub fn update_search(&mut self) {
+        self.apply_filters();
+    }
+
+    fn handle_topic_filter_key(&mut self, key_event: &KeyEvent) -> Option<Action> {
+        match key_event.code {
+            KeyCode::Esc | KeyCode::Enter => {
+                self.input_mode = InputMode::Normal;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.topic_filter.next();
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.topic_filter.previous();
+            }
+            KeyCode::Char(' ') => {
+                self.topic_filter.toggle_current();
+                self.apply_filters();
+            }
+            KeyCode::Char('c') => {
+                self.topic_filter.clear();
+                self.apply_filters();
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn render_topic_overlay(&mut self, frame: &mut Frame) {
+        let overlay_area = frame
+            .area()
+            .centered(Constraint::Percentage(70), Constraint::Percentage(80));
+
+        frame.render_widget(Clear, overlay_area);
+
+        let selected_count = self.topic_filter.selected_topics.len();
+        let title = if selected_count == 0 {
+            " Topic Filter — Space: toggle  c: clear  Esc: close ".to_string()
+        } else {
+            format!(
+                " Topic Filter ({} selected) — Space: toggle  c: clear  Esc: close ",
+                selected_count
+            )
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(title.as_str());
+
+        let inner = block.inner(overlay_area);
+        frame.render_widget(block, overlay_area);
+
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(inner);
+
+        if self.topic_filter.all_topics.is_empty() {
+            frame.render_widget(
+                Paragraph::new("No topics available — ensure the problem list is fully loaded.")
+                    .style(Style::default().fg(Color::DarkGray)),
+                layout[0],
+            );
+        } else {
+            let items: Vec<ListItem> = self
+                .topic_filter
+                .all_topics
+                .iter()
+                .map(|t| {
+                    let (prefix, color) = if self.topic_filter.selected_topics.contains(t) {
+                        ("[x] ", Color::Green)
+                    } else {
+                        ("[ ] ", Color::White)
+                    };
+                    ListItem::new(format!("{}{}", prefix, t))
+                        .style(Style::default().fg(color))
+                })
+                .collect();
+
+            let list = List::new(items)
+                .highlight_style(Style::default().bg(Color::DarkGray).fg(Color::White))
+                .highlight_symbol(">> ");
+
+            frame.render_stateful_widget(list, layout[0], &mut self.topic_filter.list_state);
+        }
+
+        let hint = if self.filtered_problems.is_empty() {
+            Paragraph::new("No problems match current filters")
+                .style(Style::default().fg(Color::Red))
+        } else {
+            Paragraph::new(format!("{} problems match", self.filtered_problems.len()))
+                .style(Style::default().fg(Color::DarkGray))
+        };
+        frame.render_widget(hint, layout[1]);
+    }
+
+    fn build_table_title(&self) -> String {
+        let diff_part = match self.difficulty_filter {
+            Some(1) => " (Easy)",
+            Some(2) => " (Medium)",
+            Some(3) => " (Hard)",
+            _ => "",
+        };
+
+        let topic_part = match self.topic_filter.selected_topics.len() {
+            0 => String::new(),
+            n => {
+                let mut names: Vec<&str> = self
+                    .topic_filter
+                    .selected_topics
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect();
+                names.sort();
+                if n <= 2 {
+                    format!(" [{}]", names.join(", "))
+                } else {
+                    format!(" [{}, +{}]", names[..2].join(", "), n - 2)
+                }
+            }
+        };
+
+        format!(" Problems{}{} ", diff_part, topic_part)
     }
 }
