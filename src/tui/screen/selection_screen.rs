@@ -207,8 +207,11 @@ impl Screen for SelectionScreen {
 
             let premium_cell = Cell::from(premium_text).style(Style::default().fg(Color::Red));
 
-            let slice = p.topics.get(..1).unwrap_or(&p.topics);
-            let topics_cell = Cell::from(slice.join("|"));
+            let topics_text = match p.topics.first() {
+                Some(topic) => topic.as_str(),
+                None => "",
+            };
+            let topics_cell = Cell::from(topics_text);
 
             Row::new(vec![
                 id_cell,
@@ -485,45 +488,52 @@ impl SelectionScreen {
     /// `update_search` pair and fixes the bug where clearing search ignored the
     /// active difficulty filter.
     pub fn apply_filters(&mut self) {
-        let mut indices: Vec<usize> = (0..self.all_problems.len()).collect();
+        self.filtered_problems.clear();
 
-        // 1. Difficulty filter
-        if let Some(diff) = self.difficulty_filter {
-            indices.retain(|&i| self.all_problems[i].difficulty == diff);
-        }
+        let query = self.input.value();
+        let has_topics = !self.topic_filter.selected_topics.is_empty();
 
-        // 2. Topic filter (OR: problem needs at least one of the selected topics)
-        if !self.topic_filter.selected_topics.is_empty() {
-            indices.retain(|&i| {
-                let problem_topics = &self.all_problems[i].topics;
-                self.topic_filter
-                    .selected_topics
+        let candidates = self.all_problems.iter().enumerate().filter(|(_, p)| {
+            if let Some(diff) = self.difficulty_filter {
+                if p.difficulty != diff {
+                    return false;
+                }
+            }
+
+            if has_topics {
+                let matches_topic = p
+                    .topics
                     .iter()
-                    .any(|t| problem_topics.contains(t))
-            });
-        }
+                    .any(|t| self.topic_filter.selected_topics.contains(t));
+                if !matches_topic {
+                    return false;
+                }
+            }
 
-        // 3. Fuzzy search on remaining candidates
-        let query = self.input.value().to_string();
-        if !query.is_empty() {
-            let matcher = SkimMatcherV2::default();
-            let mut matched: Vec<(i64, usize)> = indices
-                .into_iter()
-                .filter_map(|idx| {
-                    let p = &self.all_problems[idx];
-                    let target = format!("{} {}", p.title, p.id);
-                    matcher
-                        .fuzzy_match(&target, &query)
-                        .map(|score| (score, idx))
-                })
-                .collect();
-            matched.sort_by(|a, b| b.0.cmp(&a.0));
-            self.filtered_problems = matched.into_iter().map(|(_, i)| i).collect();
+            true
+        });
+
+        if query.is_empty() {
+            self.filtered_problems
+                .extend(candidates.map(|(idx, _)| idx));
         } else {
-            self.filtered_problems = indices;
+            let matcher = SkimMatcherV2::default();
+            let mut scored: Vec<(i64, usize)> = Vec::with_capacity(self.all_problems.len());
+
+            for (idx, p) in candidates {
+                if let Some(score) = matcher
+                    .fuzzy_match(&p.title, query)
+                    .or_else(|| matcher.fuzzy_match(&p.id.to_string(), query))
+                {
+                    scored.push((score, idx));
+                }
+            }
+
+            scored.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+            self.filtered_problems
+                .extend(scored.into_iter().map(|(_, idx)| idx));
         }
 
-        //NOTE: Reset the cursor to 0 when the list changes so we don't panic out of bounds
         if !self.filtered_problems.is_empty() {
             self.table_state.select(Some(0));
         } else {
