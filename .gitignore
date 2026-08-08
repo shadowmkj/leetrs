@@ -1,6 +1,5 @@
 /target
 Makefile
 *.py
-*.json
 !README.md
 ai_docs/
