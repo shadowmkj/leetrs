@@ -8,6 +8,10 @@ sidebar_position: 1
 
 `leetrs` supports key programming languages on LeetCode, automatically inferring file extensions, comment syntax, and stub formats.
 
+:::warning[Language Support Status]
+Currently, only **Python 3** (`python3`) and **Rust** (`rust`) are fully tested and working as expected. Other languages may contain bugs and will be fixed in future releases.
+:::
+
 ---
 
 ## 📋 Language Table
@@ -27,4 +31,4 @@ sidebar_position: 1
 When running `leetrs test` or `leetrs submit`:
 1. `leetrs` inspects the top header line of the file.
 2. If `lang=...` is found, `leetrs` uses that exact language slug.
-3. If no header line exists, `leetrs` falls back to inferring language from the file extension (`.rs` $\rightarrow$ `rust`, `.py` $\rightarrow$ `python3`, `.sql` $\rightarrow$ `mysql`).
+3. If no header line exists, `leetrs` falls back to inferring language from the file extension (`.rs` → `rust`, `.py` → `python3`, `.sql` → `mysql`).
