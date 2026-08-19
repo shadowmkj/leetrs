@@ -8,7 +8,7 @@ use std::{fs, io, process::Command, rc::Rc};
 use clap::CommandFactory;
 use clap_complete::{
     Shell,
-    aot::{Bash, Fish, Zsh},
+    aot::{Bash, Elvish, Fish, PowerShell, Zsh},
     generate,
 };
 use dialoguer::{Select, theme::ColorfulTheme};
@@ -123,9 +123,9 @@ pub fn handle_completion<C: CommandFactory>(shell: &Shell) {
         Shell::Bash => generate(Bash, &mut cmd, "leetrs", &mut io::stdout()),
         Shell::Zsh => generate(Zsh, &mut cmd, "leetrs", &mut io::stdout()),
         Shell::Fish => generate(Fish, &mut cmd, "leetrs", &mut io::stdout()),
-        Shell::Elvish => todo!(),
-        Shell::PowerShell => todo!(),
-        _ => todo!(),
+        Shell::Elvish => generate(Elvish, &mut cmd, "leetrs", &mut io::stdout()),
+        Shell::PowerShell => generate(PowerShell, &mut cmd, "leetrs", &mut io::stdout()),
+        _ => eprintln!("Unsupported shell for completion generation."),
     }
 }
 

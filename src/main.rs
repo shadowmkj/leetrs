@@ -51,11 +51,10 @@ enum Commands {
 
 /// Parses a CLI identifier argument as either a numeric problem ID or a slug string.
 fn parse_identifier(s: &str) -> Result<Identifier, String> {
-    if let Ok(num) = s.parse::<u64>() {
-        Ok(Identifier::Number(num))
-    } else {
-        Ok(Identifier::String(s.to_string()))
-    }
+    Ok(match s.parse::<u64>() {
+        Ok(num) => Identifier::Number(num),
+        Err(_) => Identifier::String(s.to_string()),
+    })
 }
 
 #[tokio::main]

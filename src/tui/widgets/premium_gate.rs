@@ -12,13 +12,8 @@ impl PremiumGate {
             return Ok(());
         }
         match user {
-            Some(u) => {
-                if u.is_premium == Some(true) {
-                    Ok(())
-                } else {
-                    Err("This problem is premium. please subscribe to access it.".to_string())
-                }
-            }
+            Some(u) if u.is_premium == Some(true) => Ok(()),
+            Some(_) => Err("This problem is premium. please subscribe to access it.".to_string()),
             None => Err(
                 "This problem is premium. please login to access it. (use `leetrs auth`)"
                     .to_string(),

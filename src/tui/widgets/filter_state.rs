@@ -148,12 +148,10 @@ impl TopicFilterState {
 
     pub fn toggle_current(&mut self) {
         let cursor = self.cursor();
-        if let Some(topic) = self.filtered_topics.get(cursor).cloned() {
-            if self.selected_topics.contains(&topic) {
-                self.selected_topics.remove(&topic);
-            } else {
-                self.selected_topics.insert(topic);
-            }
+        if let Some(topic) = self.filtered_topics.get(cursor).cloned()
+            && !self.selected_topics.remove(&topic)
+        {
+            self.selected_topics.insert(topic);
         }
     }
 
@@ -226,11 +224,7 @@ impl FilterState {
     }
 
     pub fn set_difficulty(&mut self, difficulty: u8) {
-        if difficulty > 0 && difficulty < 4 {
-            self.difficulty = Some(difficulty);
-        } else {
-            self.difficulty = None;
-        }
+        self.difficulty = (1..=3).contains(&difficulty).then_some(difficulty);
     }
 }
 
@@ -343,7 +337,6 @@ mod tests {
         assert!(total > 0);
         assert_eq!(state.filtered_topics.len(), total);
 
-        // Type "array" into search input
         let keys = ['a', 'r', 'r', 'a', 'y'];
         for c in keys {
             let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
@@ -353,7 +346,6 @@ mod tests {
         assert_eq!(state.search_input.value(), "array");
         assert_eq!(state.filtered_topics, vec!["Array", "Suffix Array"]);
 
-        // Clear search
         state.clear_search();
         assert_eq!(state.search_input.value(), "");
         assert_eq!(state.filtered_topics.len(), total);

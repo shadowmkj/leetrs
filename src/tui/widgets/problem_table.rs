@@ -30,13 +30,8 @@ impl ProblemTable {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.len - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) if i >= self.len - 1 => 0,
+            Some(i) => i + 1,
             None => 0,
         };
         self.state.select(Some(i));
@@ -47,14 +42,8 @@ impl ProblemTable {
             return;
         }
         let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.len - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
+            Some(0) | None => self.len - 1,
+            Some(i) => i - 1,
         };
         self.state.select(Some(i));
     }

@@ -452,12 +452,10 @@ mod tests {
         screen.filters.topics.mode = TopicInputMode::Normal;
         assert_eq!(screen.filters.topics.cursor(), 0);
 
-        // Send 'j' key event to move down
         let key_j = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
         screen.event_loop(&key_j);
         assert_eq!(screen.filters.topics.cursor(), 1);
 
-        // Send 'k' key event to move up
         let key_k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE);
         screen.event_loop(&key_k);
         assert_eq!(screen.filters.topics.cursor(), 0);
@@ -469,12 +467,10 @@ mod tests {
         screen.input_mode = InputMode::TopicFilter;
         screen.filters.topics.mode = TopicInputMode::Normal;
 
-        // Press '/' to enter search mode
         let key_slash = KeyEvent::new(KeyCode::Char('/'), KeyModifiers::NONE);
         screen.event_loop(&key_slash);
         assert_eq!(screen.filters.topics.mode, TopicInputMode::Editing);
 
-        // Type "Array" into topic filter search
         for c in "Array".chars() {
             let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
             screen.event_loop(&key);
@@ -489,13 +485,11 @@ mod tests {
                 .contains(&"Array".to_string())
         );
 
-        // First Esc exits search mode to Normal mode in topic filter
         let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
         screen.event_loop(&esc);
         assert_eq!(screen.filters.topics.mode, TopicInputMode::Normal);
         assert!(matches!(screen.input_mode, InputMode::TopicFilter));
 
-        // Second Esc closes topic filter overlay
         screen.event_loop(&esc);
         assert!(matches!(screen.input_mode, InputMode::Normal));
     }

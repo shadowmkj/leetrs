@@ -95,8 +95,7 @@ impl Picker {
             }
         };
 
-        //  determine filenames (converting kebab-case to snake_case)
-        let snake_slug = question.title_slug.replace("-", "_");
+        let snake_slug = question.title_slug.replace('-', "_");
         let code_filename = format!("{}.{}", snake_slug, language.code_extension());
         let desc_filename = format!("{}.md", snake_slug);
 
@@ -199,28 +198,18 @@ impl Picker {
         let user_path = cache.user_path();
         let data = match fs::read_to_string(&data_path) {
             Ok(v) => {
-                // Fetch data in the background and update data.json for next time
                 let client_clone = self.client.clone();
                 let data_path_bg = data_path.clone();
                 let user_path_bg = user_path.clone();
                 tokio::spawn(async move {
                     let res: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
                         let user_detail = client_clone.get_user_detail().await?;
-                        let data = serde_json::to_string(&user_detail)?;
-                        let _ = fs::write(&user_path_bg, data);
-                        let mut problems = client_clone.get_problem_list().await?;
-                        let question_tags = client_clone.get_topics_question_list().await?;
-                        for question_tag in question_tags {
-                            question_tag.question_ids.iter().for_each(|question_id| {
-                                if let Some(problem) =
-                                    problems.iter_mut().find(|p| p.id == *question_id)
-                                {
-                                    problem.topics.push(question_tag.name.clone());
-                                }
-                            });
-                        }
-                        let data = serde_json::to_string(&problems)?;
-                        let _ = fs::write(&data_path_bg, data);
+                        let user_json = serde_json::to_string(&user_detail)?;
+                        let _ = fs::write(&user_path_bg, user_json);
+
+                        let problems = fetch_enriched_problems(&client_clone).await?;
+                        let problems_json = serde_json::to_string(&problems)?;
+                        let _ = fs::write(&data_path_bg, problems_json);
                         Ok(())
                     }
                     .await;
@@ -230,15 +219,7 @@ impl Picker {
                 v
             }
             Err(_) => {
-                let mut problems = self.client.get_problem_list().await?;
-                let question_tags = self.client.get_topics_question_list().await?;
-                for question_tag in question_tags {
-                    question_tag.question_ids.iter().for_each(|question_id| {
-                        if let Some(problem) = problems.iter_mut().find(|p| p.id == *question_id) {
-                            problem.topics.push(question_tag.name.clone());
-                        }
-                    });
-                }
+                let problems = fetch_enriched_problems(&self.client).await?;
                 let data = serde_json::to_string(&problems)?;
                 let _ = fs::write(&data_path, &data);
                 data
@@ -254,4 +235,20 @@ impl Picker {
         })?;
         Ok(problems)
     }
+}
+
+/// Fetches problem list from the LeetCode API and enriches each entry with topic tags.
+async fn fetch_enriched_problems(
+    client: &LeetCodeClient,
+) -> crate::error::Result<Vec<ProblemSummary>> {
+    let mut problems = client.get_problem_list().await?;
+    let question_tags = client.get_topics_question_list().await?;
+    for question_tag in question_tags {
+        for question_id in &question_tag.question_ids {
+            if let Some(problem) = problems.iter_mut().find(|p| p.id == *question_id) {
+                problem.topics.push(question_tag.name.clone());
+            }
+        }
+    }
+    Ok(problems)
 }

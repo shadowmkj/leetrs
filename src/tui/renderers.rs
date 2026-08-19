@@ -29,30 +29,18 @@ pub fn render_problem_row(p: &ProblemSummary) -> Row<'static> {
     let acceptance_text = format!("{:.1}%", p.acceptance * 100.0);
     let acceptance_cell = Cell::from(acceptance_text);
 
-    let done_text = if let Some(status) = &p.status {
-        match status.as_str() {
-            "ac" => "\u{f00c}",
-            "notac" => "\u{eabc}",
-            _ => "",
-        }
-    } else {
-        ""
+    let (done_text, done_color) = match p.status.as_deref() {
+        Some("ac") => ("\u{f00c}", Color::Green),
+        Some("notac") => ("\u{eabc}", Color::White),
+        _ => ("", Color::White),
     };
-    let done_cell = match done_text {
-        "\u{f00c}" => Cell::from(done_text).style(Style::default().fg(Color::Green)),
-        _ => Cell::from(done_text).style(Style::default().fg(Color::White)),
-    };
+    let done_cell = Cell::from(done_text).style(Style::default().fg(done_color));
 
     let premium_text = if p.is_paid { "󰌾" } else { "" };
     let premium_cell = Cell::from(premium_text).style(Style::default().fg(Color::Red));
 
-    let topics_text = p
-        .topics
-        .first()
-        .map(|t| t.as_str())
-        .unwrap_or("")
-        .to_string();
-    let topics_cell = Cell::from(topics_text);
+    let topics_text = p.topics.first().map(|s| s.as_str()).unwrap_or("");
+    let topics_cell = Cell::from(topics_text.to_string());
 
     Row::new(vec![
         id_cell,

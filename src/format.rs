@@ -23,18 +23,7 @@ pub fn format_result(result: &SubmissionResult) {
 
         match &result.status {
             SubmissionStatus::Accepted if passed => {
-                if let Some(runtime) = &result.runtime {
-                    println!("⏱️ Runtime: {}", runtime);
-                }
-                if let Some(memory) = &result.memory {
-                    println!("💾 Memory: {}", memory);
-                }
-                if let Some(mp) = result.memory_percentile {
-                    println!("📝 Memory Percentile: {:.2}%", mp);
-                }
-                if let Some(rp) = result.runtime_percentile {
-                    println!("⏰ Runtime Percentile: {:.2}%", rp);
-                }
+                print_performance_metrics(result);
             }
             SubmissionStatus::Accepted => {
                 if let (Some(code_answers), Some(expected)) =
@@ -54,32 +43,14 @@ pub fn format_result(result: &SubmissionResult) {
             _ => {}
         }
     } else {
-        let status_label = match &result.status {
-            SubmissionStatus::Accepted => {
-                println!("  ✅ Accepted");
-                "Accepted"
-            }
-            SubmissionStatus::WrongAnswer => {
-                println!("  ❌ Wrong Answer");
-                "Wrong Answer"
-            }
-            SubmissionStatus::CompileError => {
-                println!("  ❌ Compile Error");
-                "Compile Error"
-            }
-            SubmissionStatus::RuntimeError => {
-                println!("  ❌ Runtime Error");
-                "Runtime Error"
-            }
-            SubmissionStatus::TimeLimitExceeded => {
-                println!("  ❌ Time Limit Exceeded");
-                "Time Limit Exceeded"
-            }
-            SubmissionStatus::Unknown(msg) => {
-                println!("  ❌ {}", msg);
-                msg.as_str()
-            }
-        };
+        match &result.status {
+            SubmissionStatus::Accepted => println!("  ✅ Accepted"),
+            SubmissionStatus::WrongAnswer => println!("  ❌ Wrong Answer"),
+            SubmissionStatus::CompileError => println!("  ❌ Compile Error"),
+            SubmissionStatus::RuntimeError => println!("  ❌ Runtime Error"),
+            SubmissionStatus::TimeLimitExceeded => println!("  ❌ Time Limit Exceeded"),
+            SubmissionStatus::Unknown(msg) => println!("  ❌ {}", msg),
+        }
         println!("==================================================\n");
 
         if let (Some(correct), Some(total)) = (result.total_correct, result.total_testcases) {
@@ -88,18 +59,7 @@ pub fn format_result(result: &SubmissionResult) {
 
         match &result.status {
             SubmissionStatus::Accepted => {
-                if let Some(runtime) = &result.runtime {
-                    println!("⏱️ Runtime: {}", runtime);
-                }
-                if let Some(memory) = &result.memory {
-                    println!("💾 Memory: {}", memory);
-                }
-                if let Some(mp) = result.memory_percentile {
-                    println!("📝 Memory Percentile: {:.2}%", mp);
-                }
-                if let Some(rp) = result.runtime_percentile {
-                    println!("⏰ Runtime Percentile: {:.2}%", rp);
-                }
+                print_performance_metrics(result);
             }
             SubmissionStatus::CompileError => {
                 if let Some(err) = &result.compile_error {
@@ -125,9 +85,22 @@ pub fn format_result(result: &SubmissionResult) {
                     println!("❌ Error\n{}", err);
                 }
             }
-            _ => {
-                let _ = status_label;
-            }
+            _ => {}
         }
+    }
+}
+
+fn print_performance_metrics(result: &SubmissionResult) {
+    if let Some(runtime) = &result.runtime {
+        println!("⏱️ Runtime: {}", runtime);
+    }
+    if let Some(memory) = &result.memory {
+        println!("💾 Memory: {}", memory);
+    }
+    if let Some(mp) = result.memory_percentile {
+        println!("📝 Memory Percentile: {:.2}%", mp);
+    }
+    if let Some(rp) = result.runtime_percentile {
+        println!("⏰ Runtime Percentile: {:.2}%", rp);
     }
 }

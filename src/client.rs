@@ -104,17 +104,18 @@ impl LeetCodeClient {
     pub fn new(creds: LeetCodeCredentials) -> Result<Self> {
         let mut headers = HeaderMap::new();
 
-        // Construct the cookie string
         let cookie_str = format!(
             "LEETCODE_SESSION={}; csrftoken={}",
             creds.session_cookie, creds.csrf_token
         );
 
-        headers.insert(COOKIE, HeaderValue::from_str(&cookie_str).unwrap());
-        headers.insert(
-            "x-csrftoken",
-            HeaderValue::from_str(&creds.csrf_token).unwrap(),
-        );
+        let cookie_val = HeaderValue::from_str(&cookie_str)
+            .map_err(|e| EngineError::Other(format!("Invalid cookie header: {}", e)))?;
+        let csrf_val = HeaderValue::from_str(&creds.csrf_token)
+            .map_err(|e| EngineError::Other(format!("Invalid CSRF token header: {}", e)))?;
+
+        headers.insert(COOKIE, cookie_val);
+        headers.insert("x-csrftoken", csrf_val);
         headers.insert(
             USER_AGENT,
             HeaderValue::from_static(
@@ -437,30 +438,28 @@ impl LeetCodeClient {
         };
 
         // Create a temporary wrapper to handle the nested JSON response
-        // LeetCode returns: { "data": { "question": { ... } } }
-        // Our execute_graphql method strips the "data" layer, so we catch the "question" layer here.
         #[derive(serde::Deserialize)]
-        struct Something {
+        struct TopicEdgeNode {
             node: QuestionTopics,
         }
         #[derive(serde::Deserialize)]
-        struct Edge {
-            edges: Vec<Something>,
+        struct TopicEdges {
+            edges: Vec<TopicEdgeNode>,
         }
         #[derive(serde::Deserialize)]
         struct QuestionTopicWrapper {
             #[serde(rename = "questionTopicTags")]
-            question_topic_tags: Edge,
+            question_topic_tags: TopicEdges,
         }
 
         let response: QuestionTopicWrapper = self.execute_graphql(query).await?;
-        let response: Vec<QuestionTopics> = response
+        let topics: Vec<QuestionTopics> = response
             .question_topic_tags
             .edges
-            .iter()
-            .map(|edge| edge.node.clone())
+            .into_iter()
+            .map(|edge| edge.node)
             .collect();
-        Ok(response)
+        Ok(topics)
     }
 
     /// Fetches the master list of all LeetCode problems

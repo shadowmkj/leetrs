@@ -8,10 +8,6 @@ use ratatui::{
 };
 
 use crate::tui::{Action, screen::Screen, utils::create_split_item};
-pub enum InputMode {
-    Editing,
-    Normal,
-}
 
 pub struct HelpScreen;
 
