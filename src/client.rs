@@ -171,11 +171,15 @@ impl LeetCodeClient {
 
     /// Fetch a specific problem's details and boilerplate using its URL slug
     pub async fn get_question_by_slug(&self, title_slug: &str) -> Result<Question> {
-        // 1. Define the exact GraphQL query LeetCode expects
+        // 1. Define the exact GraphQL query LeetCode expects.
+        // We request both `questionId` (the internal database ID required by LeetCode's
+        // submission judge endpoints) and `questionFrontendId` (the public problem number
+        // shown to users in the UI and written in problem metadata headers).
         let query_string = r#"
             query questionData($titleSlug: String!) {
                 question(titleSlug: $titleSlug) {
                     questionId
+                    questionFrontendId
                     title
                     titleSlug
                     content

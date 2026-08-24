@@ -100,10 +100,13 @@ impl Picker {
         let code_filename = format!("{}.{}", snake_slug, language.code_extension());
         let desc_filename = format!("{}.md", snake_slug);
 
+        // Write metadata comment at the top of the generated code file.
+        // We use `question_frontend_id` (the public problem number on LeetCode) so the file
+        // header displays the familiar number matching the website and CLI search.
         let meta = format!(
             "{} id={} slug={} lang={}",
             language.meta_comment_prefix(),
-            question.question_id,
+            question.question_frontend_id,
             question.title_slug,
             language.to_lang_slug()
         );
