@@ -210,15 +210,7 @@ impl Picker {
                         let _ = fs::write(&user_path_bg, data);
                         let mut problems = client_clone.get_problem_list().await?;
                         let question_tags = client_clone.get_topics_question_list().await?;
-                        for question_tag in question_tags {
-                            question_tag.question_ids.iter().for_each(|question_id| {
-                                if let Some(problem) =
-                                    problems.iter_mut().find(|p| p.id == *question_id)
-                                {
-                                    problem.topics.push(question_tag.name.clone());
-                                }
-                            });
-                        }
+                        attach_topics(&mut problems, question_tags);
                         let data = serde_json::to_string(&problems)?;
                         let _ = fs::write(&data_path_bg, data);
                         Ok(())
@@ -232,13 +224,7 @@ impl Picker {
             Err(_) => {
                 let mut problems = self.client.get_problem_list().await?;
                 let question_tags = self.client.get_topics_question_list().await?;
-                for question_tag in question_tags {
-                    question_tag.question_ids.iter().for_each(|question_id| {
-                        if let Some(problem) = problems.iter_mut().find(|p| p.id == *question_id) {
-                            problem.topics.push(question_tag.name.clone());
-                        }
-                    });
-                }
+                attach_topics(&mut problems, question_tags);
                 let data = serde_json::to_string(&problems)?;
                 let _ = fs::write(&data_path, &data);
                 data
@@ -253,5 +239,90 @@ impl Picker {
             e
         })?;
         Ok(problems)
+    }
+}
+
+/// Merges topic tag names into each problem's `topics` list in O(P + T * Q) time
+/// using a hash map lookup instead of a nested linear search.
+fn attach_topics(
+    problems: &mut [ProblemSummary],
+    question_tags: Vec<crate::models::QuestionTopics>,
+) {
+    use std::collections::HashMap;
+
+    let mut problem_map: HashMap<u64, &mut ProblemSummary> =
+        problems.iter_mut().map(|p| (p.id, p)).collect();
+
+    for tag in question_tags {
+        for q_id in tag.question_ids {
+            if let Some(problem) = problem_map.get_mut(&q_id) {
+                problem.topics.push(tag.name.clone());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{ProblemSummary, QuestionTopics};
+
+    #[test]
+    fn attach_topics_maps_tags_to_matching_problems() {
+        let mut problems = vec![
+            ProblemSummary {
+                id: 1,
+                acceptance: 50.0,
+                accepted: 100,
+                difficulty: 1,
+                slug: "two-sum".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Two Sum".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+            ProblemSummary {
+                id: 2,
+                acceptance: 40.0,
+                accepted: 80,
+                difficulty: 2,
+                slug: "add-two-numbers".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Add Two Numbers".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+        ];
+
+        let tags = vec![
+            QuestionTopics {
+                name: "Array".to_string(),
+                id: "array".to_string(),
+                slug: "array".to_string(),
+                translated_name: None,
+                question_ids: vec![1],
+            },
+            QuestionTopics {
+                name: "Math".to_string(),
+                id: "math".to_string(),
+                slug: "math".to_string(),
+                translated_name: None,
+                question_ids: vec![2],
+            },
+            QuestionTopics {
+                name: "Hash Table".to_string(),
+                id: "hash-table".to_string(),
+                slug: "hash-table".to_string(),
+                translated_name: None,
+                question_ids: vec![1],
+            },
+        ];
+
+        attach_topics(&mut problems, tags);
+
+        assert_eq!(problems[0].topics, vec!["Array", "Hash Table"]);
+        assert_eq!(problems[1].topics, vec!["Math"]);
     }
 }
