@@ -86,7 +86,12 @@ pub trait LeetCodeApi {
 
     fn get_problem_list(
         &self,
-    ) -> impl std::future::Future<Output = Result<Vec<crate::models::ProblemSummary>>> + Send;
+    ) -> impl std::future::Future<
+        Output = Result<(
+            Vec<crate::models::ProblemSummary>,
+            std::collections::HashMap<u64, u64>,
+        )>,
+    > + Send;
 }
 
 /// A configured `reqwest` HTTP client that authenticates every request with
@@ -467,8 +472,14 @@ impl LeetCodeClient {
         Ok(response)
     }
 
-    /// Fetches the master list of all LeetCode problems
-    pub async fn get_problem_list(&self) -> Result<Vec<crate::models::ProblemSummary>> {
+    /// Fetches the master list of all LeetCode problems along with a mapping
+    /// from internal `question_id` to public `frontend_question_id`.
+    pub async fn get_problem_list(
+        &self,
+    ) -> Result<(
+        Vec<crate::models::ProblemSummary>,
+        std::collections::HashMap<u64, u64>,
+    )> {
         let url = "https://leetcode.com/api/problems/all/";
 
         let response = self.http_client.get(url).send().await?;
@@ -487,6 +498,8 @@ impl LeetCodeClient {
             .and_then(|v| v.as_array())
         {
             let mut problems = Vec::with_capacity(pairs.len());
+            let mut id_map = std::collections::HashMap::with_capacity(pairs.len());
+
             for pair in pairs {
                 if let (Some(stat), Some(difficulty), Some(status), Some(paid_only)) = (
                     pair.get("stat"),
@@ -494,10 +507,19 @@ impl LeetCodeClient {
                     pair.get("status"),
                     pair.get("paid_only"),
                 ) {
-                    let id = stat
+                    let internal_id = stat
+                        .get("question_id")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let frontend_id = stat
                         .get("frontend_question_id")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(0);
+
+                    if internal_id > 0 && frontend_id > 0 {
+                        id_map.insert(internal_id, frontend_id);
+                    }
+
                     let title = stat
                         .get("question__title")
                         .and_then(|v| v.as_str())
@@ -521,7 +543,7 @@ impl LeetCodeClient {
                     let acceptance = accepted as f64 / submitted as f64;
 
                     problems.push(crate::models::ProblemSummary {
-                        id,
+                        id: frontend_id,
                         title,
                         slug,
                         difficulty: level,
@@ -536,7 +558,7 @@ impl LeetCodeClient {
             }
             // The API returns them sorted by ID descending by default, let's sort ascending
             problems.sort_by_key(|p| p.id);
-            return Ok(problems);
+            return Ok((problems, id_map));
         }
         Err(EngineError::Other(
             "Error retrieving problem list".to_string(),
@@ -615,7 +637,12 @@ impl LeetCodeApi for LeetCodeClient {
 
     fn get_problem_list(
         &self,
-    ) -> impl std::future::Future<Output = Result<Vec<crate::models::ProblemSummary>>> + Send {
+    ) -> impl std::future::Future<
+        Output = Result<(
+            Vec<crate::models::ProblemSummary>,
+            std::collections::HashMap<u64, u64>,
+        )>,
+    > + Send {
         LeetCodeClient::get_problem_list(self)
     }
 }

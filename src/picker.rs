@@ -220,9 +220,9 @@ impl Picker {
                         let user_detail = client_clone.get_user_detail().await?;
                         let data = serde_json::to_string(&user_detail)?;
                         let _ = fs::write(&user_path_bg, data);
-                        let mut problems = client_clone.get_problem_list().await?;
+                        let (mut problems, id_map) = client_clone.get_problem_list().await?;
                         let question_tags = client_clone.get_topics_question_list().await?;
-                        attach_topics(&mut problems, question_tags);
+                        attach_topics(&mut problems, question_tags, &id_map);
                         let data = serde_json::to_string(&problems)?;
                         let _ = fs::write(&data_path_bg, data);
                         Ok(())
@@ -234,9 +234,9 @@ impl Picker {
                 v
             }
             Err(_) => {
-                let mut problems = self.client.get_problem_list().await?;
+                let (mut problems, id_map) = self.client.get_problem_list().await?;
                 let question_tags = self.client.get_topics_question_list().await?;
-                attach_topics(&mut problems, question_tags);
+                attach_topics(&mut problems, question_tags, &id_map);
                 let data = serde_json::to_string(&problems)?;
                 let _ = fs::write(&data_path, &data);
                 data
@@ -256,9 +256,15 @@ impl Picker {
 
 /// Merges topic tag names into each problem's `topics` list in O(P + T * Q) time
 /// using a hash map lookup instead of a nested linear search.
+///
+/// LeetCode's `questionTopicTags` GraphQL response lists problems by their
+/// internal database `questionId`. This function translates each internal ID
+/// to the public `frontend_question_id` (matching `ProblemSummary.id`) before
+/// attaching topics.
 fn attach_topics(
     problems: &mut [ProblemSummary],
     question_tags: Vec<crate::models::QuestionTopics>,
+    internal_to_frontend: &std::collections::HashMap<u64, u64>,
 ) {
     use std::collections::HashMap;
 
@@ -266,8 +272,13 @@ fn attach_topics(
         problems.iter_mut().map(|p| (p.id, p)).collect();
 
     for tag in question_tags {
-        for q_id in tag.question_ids {
-            if let Some(problem) = problem_map.get_mut(&q_id) {
+        for internal_id in tag.question_ids {
+            let frontend_id = internal_to_frontend
+                .get(&internal_id)
+                .copied()
+                .unwrap_or(internal_id);
+
+            if let Some(problem) = problem_map.get_mut(&frontend_id) {
                 problem.topics.push(tag.name.clone());
             }
         }
@@ -278,6 +289,7 @@ fn attach_topics(
 mod tests {
     use super::*;
     use crate::models::{ProblemSummary, QuestionTopics};
+    use std::collections::HashMap;
 
     #[test]
     fn attach_topics_maps_tags_to_matching_problems() {
@@ -332,9 +344,70 @@ mod tests {
             },
         ];
 
-        attach_topics(&mut problems, tags);
+        let id_map = HashMap::new();
+        attach_topics(&mut problems, tags, &id_map);
 
         assert_eq!(problems[0].topics, vec!["Array", "Hash Table"]);
         assert_eq!(problems[1].topics, vec!["Math"]);
+    }
+
+    #[test]
+    fn attach_topics_translates_unequal_internal_and_frontend_ids() {
+        let mut problems = vec![
+            ProblemSummary {
+                id: 1550, // Public Frontend ID
+                acceptance: 50.0,
+                accepted: 100,
+                difficulty: 1,
+                slug: "three-consecutive-odds".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Three Consecutive Odds".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+            ProblemSummary {
+                id: 1677, // Another problem whose frontend ID equals 1677
+                acceptance: 40.0,
+                accepted: 80,
+                difficulty: 2,
+                slug: "products-worth-over-invoice".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Products' Worth Over Invoices".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+        ];
+
+        // Mapping: internal ID 1677 translates to public frontend ID 1550,
+        // while internal ID 1800 translates to public frontend ID 1677.
+        let mut id_map = HashMap::new();
+        id_map.insert(1677, 1550);
+        id_map.insert(1800, 1677);
+
+        // Tags from GraphQL with internal question IDs
+        let tags = vec![
+            QuestionTopics {
+                name: "Array".to_string(),
+                id: "array".to_string(),
+                slug: "array".to_string(),
+                translated_name: None,
+                question_ids: vec![1677],
+            },
+            QuestionTopics {
+                name: "Database".to_string(),
+                id: "database".to_string(),
+                slug: "database".to_string(),
+                translated_name: None,
+                question_ids: vec![1800],
+            },
+        ];
+
+        attach_topics(&mut problems, tags, &id_map);
+
+        // Verify topic "Array" was attached to problem #1550 (not problem #1677)
+        assert_eq!(problems[0].topics, vec!["Array"]);
+        assert_eq!(problems[1].topics, vec!["Database"]);
     }
 }
