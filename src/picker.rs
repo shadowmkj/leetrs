@@ -266,17 +266,18 @@ fn attach_topics(
     question_tags: Vec<crate::models::QuestionTopics>,
     internal_to_frontend: &std::collections::HashMap<u64, u64>,
 ) {
-    use std::collections::HashMap;
-
-    let mut problem_map: HashMap<u64, &mut ProblemSummary> =
+    let mut problem_map: std::collections::HashMap<u64, &mut ProblemSummary> =
         problems.iter_mut().map(|p| (p.id, p)).collect();
 
     for tag in question_tags {
         for internal_id in tag.question_ids {
-            let frontend_id = internal_to_frontend
-                .get(&internal_id)
-                .copied()
-                .unwrap_or(internal_id);
+            // Problems where internal_id == frontend_id will always be found in
+            // the map (the REST endpoint lists all problems). If a mapping is
+            // missing we skip rather than guessing, to avoid attaching the wrong
+            // topic to an unrelated problem.
+            let Some(&frontend_id) = internal_to_frontend.get(&internal_id) else {
+                continue;
+            };
 
             if let Some(problem) = problem_map.get_mut(&frontend_id) {
                 problem.topics.push(tag.name.clone());
@@ -344,7 +345,10 @@ mod tests {
             },
         ];
 
-        let id_map = HashMap::new();
+        // These problems have equal internal and frontend IDs — the common case
+        // for older problems. The map must still be populated; we no longer fall
+        // back to the raw internal ID when a mapping is absent.
+        let id_map = HashMap::from([(1u64, 1u64), (2u64, 2u64)]);
         attach_topics(&mut problems, tags, &id_map);
 
         assert_eq!(problems[0].topics, vec!["Array", "Hash Table"]);

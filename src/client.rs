@@ -518,42 +518,47 @@ impl LeetCodeClient {
 
                     if internal_id > 0 && frontend_id > 0 {
                         id_map.insert(internal_id, frontend_id);
+
+                        let title = stat
+                            .get("question__title")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let slug = stat
+                            .get("question__title_slug")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let level = difficulty
+                            .get("level")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u8;
+                        let status = status.as_str().map(String::from);
+                        let accepted = stat.get("total_acs").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let submitted = stat
+                            .get("total_submitted")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        // Guard against division by zero for problems with no submissions yet.
+                        let acceptance = if submitted > 0 {
+                            accepted as f64 / submitted as f64
+                        } else {
+                            0.0
+                        };
+
+                        problems.push(crate::models::ProblemSummary {
+                            id: frontend_id,
+                            title,
+                            slug,
+                            difficulty: level,
+                            accepted,
+                            submitted,
+                            acceptance,
+                            status,
+                            is_paid: paid_only.as_bool().unwrap_or(false),
+                            topics: Vec::new(),
+                        });
                     }
-
-                    let title = stat
-                        .get("question__title")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let slug = stat
-                        .get("question__title_slug")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let level = difficulty
-                        .get("level")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0) as u8;
-                    let status = status.as_str().map(String::from);
-                    let accepted = stat.get("total_acs").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let submitted = stat
-                        .get("total_submitted")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-                    let acceptance = accepted as f64 / submitted as f64;
-
-                    problems.push(crate::models::ProblemSummary {
-                        id: frontend_id,
-                        title,
-                        slug,
-                        difficulty: level,
-                        accepted,
-                        submitted,
-                        acceptance,
-                        status,
-                        is_paid: paid_only.as_bool().unwrap_or(false),
-                        topics: Vec::new(),
-                    });
                 }
             }
             // The API returns them sorted by ID descending by default, let's sort ascending
