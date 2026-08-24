@@ -30,8 +30,15 @@ impl Picker {
     /// Resolves a problem by [`Identifier`], writes the Markdown description
     /// and language-specific code stub to disk, and returns their paths.
     ///
-    /// If both files already exist on disk (slug-based match) they are returned
-    /// immediately without hitting the network.
+    /// # Existing Files & Migration Policy
+    /// If both code and description files already exist on disk (slug-based match),
+    /// they are returned immediately without network access. Existing files are
+    /// intentionally left unmodified to safeguard user code. Legacy files containing
+    /// the older internal `question_id` in their comment headers remain fully
+    /// compatible because submission and testing resolve the problem metadata
+    /// dynamically via the filename slug, not from the comment header.
+    ///
+    /// Newly generated files will have `question_frontend_id` in their headers.
     ///
     /// # Returns
     /// `(code_file_path, description_file_path)` on success.
@@ -55,6 +62,8 @@ impl Picker {
 
         //TODO: If language is specified, must open that file
         // else open the file with matching slug.
+        // Early-return if files already exist: we preserve existing user code as-is
+        // without rewriting comment headers.
         if let Identifier::String(ident) = identifier {
             let snake_slug = ident.replace("-", "_");
             let code_filename = format!("{}.{}", snake_slug, language.code_extension());
