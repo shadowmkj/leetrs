@@ -11,7 +11,7 @@ pub struct GraphQLQuery {
 }
 
 /// A single code snippet returned by LeetCode's GraphQL API for one language.
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct QuestionSnippet {
     #[serde(rename = "langSlug")]
     pub lang_slug: String,
@@ -29,10 +29,26 @@ pub struct UserDetail {
 }
 
 /// Full problem details fetched from the `questionData` GraphQL query.
-#[derive(Deserialize, Debug)]
+///
+/// # Identifier Distinction: `question_id` vs `question_frontend_id`
+///
+/// LeetCode maintains two distinct identifiers for each problem:
+/// - [`question_id`](Self::question_id) (`questionId` in GraphQL / REST):
+///   The internal database primary key. LeetCode's backend judging endpoints
+///   (`/problems/{slug}/submit/` and `/interpret_solution/`) **require** this
+///   internal ID in their JSON submission payloads.
+/// - [`question_frontend_id`](Self::question_frontend_id) (`questionFrontendId` in GraphQL / `frontend_question_id` in REST):
+///   The public-facing problem number visible on leetcode.com, in problem tables,
+///   and in search results (e.g. `1` for Two Sum, `1550` for Three Consecutive Odds).
+///   This ID is used for user display and in generated source file metadata headers.
+#[derive(Deserialize, Debug, Clone)]
 pub struct Question {
+    /// Internal database ID required by LeetCode judging/submission APIs.
     #[serde(rename = "questionId")]
     pub question_id: String,
+    /// Public problem number visible to users on LeetCode and in search.
+    #[serde(rename = "questionFrontendId")]
+    pub question_frontend_id: String,
     #[serde(rename = "titleSlug")]
     pub title_slug: String,
     pub title: String,

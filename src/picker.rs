@@ -30,8 +30,15 @@ impl Picker {
     /// Resolves a problem by [`Identifier`], writes the Markdown description
     /// and language-specific code stub to disk, and returns their paths.
     ///
-    /// If both files already exist on disk (slug-based match) they are returned
-    /// immediately without hitting the network.
+    /// # Existing Files & Migration Policy
+    /// If both code and description files already exist on disk (slug-based match),
+    /// they are returned immediately without network access. Existing files are
+    /// intentionally left unmodified to safeguard user code. Legacy files containing
+    /// the older internal `question_id` in their comment headers remain fully
+    /// compatible because submission and testing resolve the problem metadata
+    /// dynamically via the filename slug, not from the comment header.
+    ///
+    /// Newly generated files will have `question_frontend_id` in their headers.
     ///
     /// # Returns
     /// `(code_file_path, description_file_path)` on success.
@@ -55,6 +62,8 @@ impl Picker {
 
         //TODO: If language is specified, must open that file
         // else open the file with matching slug.
+        // Early-return if files already exist: we preserve existing user code as-is
+        // without rewriting comment headers.
         if let Identifier::String(ident) = identifier {
             let snake_slug = ident.replace("-", "_");
             let code_filename = format!("{}.{}", snake_slug, language.code_extension());
@@ -100,10 +109,13 @@ impl Picker {
         let code_filename = format!("{}.{}", snake_slug, language.code_extension());
         let desc_filename = format!("{}.md", snake_slug);
 
+        // Write metadata comment at the top of the generated code file.
+        // We use `question_frontend_id` (the public problem number on LeetCode) so the file
+        // header displays the familiar number matching the website and CLI search.
         let meta = format!(
             "{} id={} slug={} lang={}",
             language.meta_comment_prefix(),
-            question.question_id,
+            question.question_frontend_id,
             question.title_slug,
             language.to_lang_slug()
         );
@@ -208,17 +220,9 @@ impl Picker {
                         let user_detail = client_clone.get_user_detail().await?;
                         let data = serde_json::to_string(&user_detail)?;
                         let _ = fs::write(&user_path_bg, data);
-                        let mut problems = client_clone.get_problem_list().await?;
+                        let (mut problems, id_map) = client_clone.get_problem_list().await?;
                         let question_tags = client_clone.get_topics_question_list().await?;
-                        for question_tag in question_tags {
-                            question_tag.question_ids.iter().for_each(|question_id| {
-                                if let Some(problem) =
-                                    problems.iter_mut().find(|p| p.id == *question_id)
-                                {
-                                    problem.topics.push(question_tag.name.clone());
-                                }
-                            });
-                        }
+                        attach_topics(&mut problems, question_tags, &id_map);
                         let data = serde_json::to_string(&problems)?;
                         let _ = fs::write(&data_path_bg, data);
                         Ok(())
@@ -230,15 +234,9 @@ impl Picker {
                 v
             }
             Err(_) => {
-                let mut problems = self.client.get_problem_list().await?;
+                let (mut problems, id_map) = self.client.get_problem_list().await?;
                 let question_tags = self.client.get_topics_question_list().await?;
-                for question_tag in question_tags {
-                    question_tag.question_ids.iter().for_each(|question_id| {
-                        if let Some(problem) = problems.iter_mut().find(|p| p.id == *question_id) {
-                            problem.topics.push(question_tag.name.clone());
-                        }
-                    });
-                }
+                attach_topics(&mut problems, question_tags, &id_map);
                 let data = serde_json::to_string(&problems)?;
                 let _ = fs::write(&data_path, &data);
                 data
@@ -253,5 +251,167 @@ impl Picker {
             e
         })?;
         Ok(problems)
+    }
+}
+
+/// Merges topic tag names into each problem's `topics` list in O(P + T * Q) time
+/// using a hash map lookup instead of a nested linear search.
+///
+/// LeetCode's `questionTopicTags` GraphQL response lists problems by their
+/// internal database `questionId`. This function translates each internal ID
+/// to the public `frontend_question_id` (matching `ProblemSummary.id`) before
+/// attaching topics.
+fn attach_topics(
+    problems: &mut [ProblemSummary],
+    question_tags: Vec<crate::models::QuestionTopics>,
+    internal_to_frontend: &std::collections::HashMap<u64, u64>,
+) {
+    let mut problem_map: std::collections::HashMap<u64, &mut ProblemSummary> =
+        problems.iter_mut().map(|p| (p.id, p)).collect();
+
+    for tag in question_tags {
+        for internal_id in tag.question_ids {
+            // Problems where internal_id == frontend_id will always be found in
+            // the map (the REST endpoint lists all problems). If a mapping is
+            // missing we skip rather than guessing, to avoid attaching the wrong
+            // topic to an unrelated problem.
+            let Some(&frontend_id) = internal_to_frontend.get(&internal_id) else {
+                continue;
+            };
+
+            if let Some(problem) = problem_map.get_mut(&frontend_id) {
+                problem.topics.push(tag.name.clone());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{ProblemSummary, QuestionTopics};
+    use std::collections::HashMap;
+
+    #[test]
+    fn attach_topics_maps_tags_to_matching_problems() {
+        let mut problems = vec![
+            ProblemSummary {
+                id: 1,
+                acceptance: 50.0,
+                accepted: 100,
+                difficulty: 1,
+                slug: "two-sum".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Two Sum".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+            ProblemSummary {
+                id: 2,
+                acceptance: 40.0,
+                accepted: 80,
+                difficulty: 2,
+                slug: "add-two-numbers".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Add Two Numbers".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+        ];
+
+        let tags = vec![
+            QuestionTopics {
+                name: "Array".to_string(),
+                id: "array".to_string(),
+                slug: "array".to_string(),
+                translated_name: None,
+                question_ids: vec![1],
+            },
+            QuestionTopics {
+                name: "Math".to_string(),
+                id: "math".to_string(),
+                slug: "math".to_string(),
+                translated_name: None,
+                question_ids: vec![2],
+            },
+            QuestionTopics {
+                name: "Hash Table".to_string(),
+                id: "hash-table".to_string(),
+                slug: "hash-table".to_string(),
+                translated_name: None,
+                question_ids: vec![1],
+            },
+        ];
+
+        // These problems have equal internal and frontend IDs — the common case
+        // for older problems. The map must still be populated; we no longer fall
+        // back to the raw internal ID when a mapping is absent.
+        let id_map = HashMap::from([(1u64, 1u64), (2u64, 2u64)]);
+        attach_topics(&mut problems, tags, &id_map);
+
+        assert_eq!(problems[0].topics, vec!["Array", "Hash Table"]);
+        assert_eq!(problems[1].topics, vec!["Math"]);
+    }
+
+    #[test]
+    fn attach_topics_translates_unequal_internal_and_frontend_ids() {
+        let mut problems = vec![
+            ProblemSummary {
+                id: 1550, // Public Frontend ID
+                acceptance: 50.0,
+                accepted: 100,
+                difficulty: 1,
+                slug: "three-consecutive-odds".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Three Consecutive Odds".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+            ProblemSummary {
+                id: 1677, // Another problem whose frontend ID equals 1677
+                acceptance: 40.0,
+                accepted: 80,
+                difficulty: 2,
+                slug: "products-worth-over-invoice".to_string(),
+                status: None,
+                submitted: 200,
+                title: "Products' Worth Over Invoices".to_string(),
+                is_paid: false,
+                topics: vec![],
+            },
+        ];
+
+        // Mapping: internal ID 1677 translates to public frontend ID 1550,
+        // while internal ID 1800 translates to public frontend ID 1677.
+        let mut id_map = HashMap::new();
+        id_map.insert(1677, 1550);
+        id_map.insert(1800, 1677);
+
+        // Tags from GraphQL with internal question IDs
+        let tags = vec![
+            QuestionTopics {
+                name: "Array".to_string(),
+                id: "array".to_string(),
+                slug: "array".to_string(),
+                translated_name: None,
+                question_ids: vec![1677],
+            },
+            QuestionTopics {
+                name: "Database".to_string(),
+                id: "database".to_string(),
+                slug: "database".to_string(),
+                translated_name: None,
+                question_ids: vec![1800],
+            },
+        ];
+
+        attach_topics(&mut problems, tags, &id_map);
+
+        // Verify topic "Array" was attached to problem #1550 (not problem #1677)
+        assert_eq!(problems[0].topics, vec!["Array"]);
+        assert_eq!(problems[1].topics, vec!["Database"]);
     }
 }
