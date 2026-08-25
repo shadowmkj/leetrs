@@ -17,6 +17,7 @@ Thank you for contributing to `leetrs`! This guide walks through setting up your
 - **Rust Toolchain**: `1.70+` (`rustup`)
 - **Neovim**: `0.9+`
 - **Node.js & pnpm**: Required only for editing Docusaurus documentation (`docs/`)
+- **cargo-llvm-cov** *(optional)*: Required for generating coverage reports (`cargo install cargo-llvm-cov`)
 
 ### 2. Clone & Build
 
@@ -36,17 +37,30 @@ cargo run -- tui
 
 ## 🧪 Testing & Verification
 
-Run the full Rust unit and integration test suite before submitting changes:
+`leetrs` includes a built-in `xtask` runner to verify quality gates locally before submitting PRs:
 
+### Run Full CI Quality Gate
 ```bash
-cargo test
+cargo xtask ci
 ```
+This runs:
+1. **Format check**: `cargo fmt --all --check`
+2. **Clippy analysis**: `cargo clippy --all-targets -- -D warnings`
+3. **Test suite**: `cargo test`
 
-Check code formatting and linting:
-
+### Individual Quality Tasks
 ```bash
-cargo fmt --check
-cargo clippy -- -D warnings
+# Auto-format all code (or check only with `cargo xtask fmt --check`)
+cargo xtask fmt
+
+# Run Clippy linter with warnings denied
+cargo xtask clippy
+
+# Run the unit test suite
+cargo xtask test
+
+# Generate code coverage HTML report (requires cargo-llvm-cov)
+cargo xtask coverage --html
 ```
 
 ---

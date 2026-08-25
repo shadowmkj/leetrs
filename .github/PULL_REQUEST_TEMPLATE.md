@@ -20,18 +20,16 @@ Closes #
 
 ## Checklist
 
-
 - [ ] The code compiles without warnings (`cargo build`)
 - [ ] Added / Modified testcases related to this PR
-- [ ] All tests passed successfully.
-- [ ] `cargo clippy` passes with no new lints
+- [ ] Local CI quality gate passed (`cargo xtask ci`)
 - [ ] Existing behaviour is unchanged (or breaking changes are documented below)
 - [ ] Relevant documentation / comments have been updated
 
 ## Testing
 
-```
-cargo test
+```bash
+cargo xtask ci
 ```
 
 ## Breaking changes
