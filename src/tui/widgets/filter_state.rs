@@ -18,6 +18,16 @@ use crate::models::ProblemSummary;
 // just to build the list of filterable topics.
 const TOPICS_TXT: &str = include_str!("../../../topics.txt");
 
+static STATIC_TOPICS: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+    let mut topics: Vec<String> = TOPICS_TXT
+        .lines()
+        .map(|line| line.trim().trim_matches('"').to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    topics.sort();
+    topics
+});
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TopicInputMode {
     #[default]
@@ -40,13 +50,7 @@ impl TopicFilterState {
     /// Constructs a new [`TopicFilterState`] populated with topics loaded
     /// directly from `topics.txt`.
     pub fn new() -> Self {
-        // Parse raw topic lines, trimming surrounding quotes and whitespace.
-        let mut all_topics: Vec<String> = TOPICS_TXT
-            .lines()
-            .map(|line| line.trim().trim_matches('"').to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        all_topics.sort();
+        let all_topics = STATIC_TOPICS.clone();
 
         let mut list_state = ListState::default();
         if !all_topics.is_empty() {

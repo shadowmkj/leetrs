@@ -139,4 +139,25 @@ mod tests {
         assert_eq!(r.total_correct, Some(0));
         assert_eq!(r.total_testcases, Some(57));
     }
+
+    #[test]
+    fn question_deserializes_both_internal_and_frontend_ids() {
+        let raw = r#"{
+            "questionId": "1677",
+            "questionFrontendId": "1550",
+            "title": "Three Consecutive Odds",
+            "titleSlug": "three-consecutive-odds",
+            "content": "<p>Content</p>",
+            "exampleTestcases": "[1,2,3]",
+            "codeSnippets": [
+                { "langSlug": "rust", "code": "impl Solution {}" }
+            ]
+        }"#;
+        let q: Question = serde_json::from_str(raw).expect("question deserialization failed");
+        assert_eq!(q.question_id, "1677");
+        assert_eq!(q.question_frontend_id, "1550");
+        assert_eq!(q.title_slug, "three-consecutive-odds");
+        assert_eq!(q.title, "Three Consecutive Odds");
+        assert_eq!(q.code_snippets.len(), 1);
+    }
 }

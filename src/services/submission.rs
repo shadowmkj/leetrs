@@ -120,6 +120,8 @@ impl SubmissionService {
         println!("🚀 Submitting {}...", file);
 
         if is_test {
+            // NOTE: LeetCode's interpret_solution endpoint requires the internal `question_id`
+            // (not the public `question_frontend_id`) in its request payload.
             let interpret_id = self
                 .client
                 .test_code(
@@ -161,6 +163,8 @@ impl SubmissionService {
                 code_output: r.code_output.map(|v| v.join("\t")),
             })
         } else {
+            // NOTE: LeetCode's submit endpoint requires the internal `question_id`
+            // (not the public `question_frontend_id`) in its request payload.
             let submission_id = self
                 .client
                 .submit_code(&slug, &question.question_id, language.to_lang_slug(), &code)
