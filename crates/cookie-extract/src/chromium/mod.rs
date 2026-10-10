@@ -24,7 +24,7 @@ impl CookieExtractor for ChromiumExtractor {
         let key = crypto::macos::get_macos_key(self.browser)?;
 
         #[cfg(target_os = "linux")]
-        let key = crypto::linux::get_linux_key()?;
+        let key = crypto::linux::get_linux_key(self.browser)?;
 
         let mut all_cookies = Vec::new();
         for domain in domains {
