@@ -98,7 +98,7 @@ fn run_clippy(root: &Path) -> Result<()> {
 
 fn run_test(root: &Path) -> Result<()> {
     let mut cmd = Command::new("cargo");
-    cmd.current_dir(root).arg("test");
+    cmd.current_dir(root).arg("test").arg("--workspace");
     execute_command(&mut cmd, "while running test suite")
 }
 

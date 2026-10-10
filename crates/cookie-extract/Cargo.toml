@@ -1,0 +1,26 @@
+[package]
+name = "cookie-extract"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Decoupled cross-platform browser cookie extraction and parsing library"
+
+[dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
+thiserror = "2.0"
+directories = "6.0"
+aes = "0.8"
+cbc = "0.1"
+cipher = "0.4"
+pbkdf2 = "0.12"
+sha1 = "0.10"
+hmac = "0.12"
+tempfile = "3.10"
+regex = "1.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2.11"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Security_Cryptography"] }
