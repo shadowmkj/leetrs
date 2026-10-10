@@ -5,60 +5,108 @@ use aes::Aes128;
 use cbc::cipher::{BlockDecryptMut, KeyIvInit};
 use pbkdf2::pbkdf2_hmac;
 use sha1::Sha1;
+use std::collections::HashSet;
 use std::process::Command;
 
 type Aes128CbcDec = cbc::Decryptor<Aes128>;
 
-/// Retrieves the Chromium encryption key on Linux using SecretService / `secret-tool`,
-/// with a fallback to the default "peanuts" password if no keyring service is running.
-pub fn get_linux_key(browser: Browser) -> Result<Vec<u8>, ExtractError> {
-    let app_name = match browser {
-        Browser::Chrome => "chrome",
-        Browser::Brave => "brave",
-        Browser::Edge => "microsoft-edge",
-        _ => "chromium",
-    };
+/// Retrieves all potential Chromium decryption keys on Linux by querying SecretService
+/// via `secret-tool`, KWallet, and the default "peanuts" fallback.
+pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
+    let mut passwords: HashSet<String> = HashSet::new();
 
-    let service_name = match browser {
-        Browser::Chrome => "Chrome Safe Storage",
-        Browser::Brave => "Brave Safe Storage",
-        Browser::Edge => "Microsoft Edge Safe Storage",
-        _ => "Chromium Safe Storage",
-    };
+    // 1. Build list of secret-tool attribute queries based on browser and common Linux conventions
+    let mut secret_tool_queries: Vec<(&str, &str)> = Vec::new();
 
-    // 1. Try querying secret-tool by application attribute (GNOME Keyring / KWallet standard)
-    let password = if let Ok(out) = Command::new("secret-tool")
-        .args(["lookup", "application", app_name])
-        .output()
-    {
-        if out.status.success() && !out.stdout.is_empty() {
-            String::from_utf8_lossy(&out.stdout).trim().to_string()
-        } else if let Ok(out2) = Command::new("secret-tool")
-            .args(["lookup", "service", service_name])
+    match browser {
+        Browser::Chrome => {
+            secret_tool_queries.push(("application", "chrome"));
+            secret_tool_queries.push(("application", "google-chrome"));
+            secret_tool_queries.push(("application", "google-chrome-stable"));
+            secret_tool_queries.push(("application", "chromium"));
+            secret_tool_queries.push(("service", "Chrome Safe Storage"));
+            secret_tool_queries.push(("service", "Chromium Safe Storage"));
+        }
+        Browser::Brave => {
+            secret_tool_queries.push(("application", "brave"));
+            secret_tool_queries.push(("application", "brave-browser"));
+            secret_tool_queries.push(("application", "chromium"));
+            secret_tool_queries.push(("service", "Brave Safe Storage"));
+            secret_tool_queries.push(("service", "Chromium Safe Storage"));
+        }
+        Browser::Edge => {
+            secret_tool_queries.push(("application", "microsoft-edge"));
+            secret_tool_queries.push(("application", "microsoft-edge-dev"));
+            secret_tool_queries.push(("service", "Microsoft Edge Safe Storage"));
+        }
+        _ => {
+            secret_tool_queries.push(("application", "chromium"));
+            secret_tool_queries.push(("application", "chrome"));
+            secret_tool_queries.push(("service", "Chromium Safe Storage"));
+            secret_tool_queries.push(("service", "Chrome Safe Storage"));
+        }
+    }
+
+    // Always check general fallback attributes
+    secret_tool_queries.push(("application", "chromium"));
+    secret_tool_queries.push(("application", "chrome"));
+
+    for (attr, val) in secret_tool_queries {
+        if let Ok(out) = Command::new("secret-tool")
+            .args(["lookup", attr, val])
             .output()
         {
-            if out2.status.success() && !out2.stdout.is_empty() {
-                String::from_utf8_lossy(&out2.stdout).trim().to_string()
-            } else {
-                "peanuts".to_string()
+            if out.status.success() && !out.stdout.is_empty() {
+                let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !pass.is_empty() {
+                    passwords.insert(pass);
+                }
             }
-        } else {
-            "peanuts".to_string()
         }
-    } else {
-        "peanuts".to_string()
-    };
+    }
 
-    let mut key = [0u8; 16];
-    pbkdf2_hmac::<Sha1>(password.as_bytes(), b"saltysalt", 1, &mut key);
-    Ok(key.to_vec())
+    // 2. Try querying KWallet if running KDE Plasma
+    let kwallet_queries = [
+        ("Chrome Keys", "Chrome Safe Storage"),
+        ("Chromium Keys", "Chromium Safe Storage"),
+        ("Brave Keys", "Brave Safe Storage"),
+    ];
+
+    for (folder, key_name) in kwallet_queries {
+        if let Ok(out) = Command::new("kwallet-query")
+            .args(["-f", folder, "kdewallet", "-r", key_name])
+            .output()
+        {
+            if out.status.success() && !out.stdout.is_empty() {
+                let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !pass.is_empty() {
+                    passwords.insert(pass);
+                }
+            }
+        }
+    }
+
+    // 3. Always include default "peanuts" password
+    passwords.insert("peanuts".to_string());
+
+    // Derive 128-bit keys via PBKDF2 (1 iteration, salt "saltysalt")
+    passwords
+        .into_iter()
+        .map(|password| {
+            let mut key = [0u8; 16];
+            pbkdf2_hmac::<Sha1>(password.as_bytes(), b"saltysalt", 1, &mut key);
+            key.to_vec()
+        })
+        .collect()
 }
 
-/// Decrypts a `v10`/`v11` encrypted cookie value on Linux.
+/// Decrypts a `v10`/`v11` encrypted cookie value on Linux with a candidate key.
 pub fn decrypt_v10_linux(key: &[u8], encrypted_value: &[u8]) -> Result<String, ExtractError> {
-    if encrypted_value.len() < 3
-        || (&encrypted_value[..3] != b"v10" && &encrypted_value[..3] != b"v11")
-    {
+    if encrypted_value.len() < 3 {
+        return Ok(String::from_utf8_lossy(encrypted_value).to_string());
+    }
+
+    if &encrypted_value[..3] != b"v10" && &encrypted_value[..3] != b"v11" {
         return Ok(String::from_utf8_lossy(encrypted_value).to_string());
     }
 
@@ -66,6 +114,12 @@ pub fn decrypt_v10_linux(key: &[u8], encrypted_value: &[u8]) -> Result<String, E
     let ciphertext = &encrypted_value[3..];
     if ciphertext.is_empty() {
         return Ok(String::new());
+    }
+
+    if key.len() < 16 {
+        return Err(ExtractError::KeyRetrievalError(
+            "Derived key too short".into(),
+        ));
     }
 
     let decryptor = Aes128CbcDec::new((&key[..16]).into(), (&iv).into());
@@ -77,7 +131,18 @@ pub fn decrypt_v10_linux(key: &[u8], encrypted_value: &[u8]) -> Result<String, E
             ExtractError::DatabaseError(format!("Linux AES-CBC decryption error: {:?}", e))
         })?;
 
-    Ok(String::from_utf8_lossy(decrypted).to_string())
+    // Check if leading 32 bytes contain non-ASCII binary control bytes (signature/hash header)
+    let payload = if decrypted.len() >= 32
+        && decrypted[..32]
+            .iter()
+            .any(|&b| b < 0x20 && b != b'\t' && b != b'\n' && b != b'\r')
+    {
+        &decrypted[32..]
+    } else {
+        decrypted
+    };
+
+    Ok(String::from_utf8_lossy(payload).to_string())
 }
 
 #[cfg(test)]
@@ -90,5 +155,11 @@ mod tests {
         let plain = b"unencrypted_value";
         let result = decrypt_v10_linux(&key, plain).expect("Failed to parse plaintext");
         assert_eq!(result, "unencrypted_value");
+    }
+
+    #[test]
+    fn get_linux_keys_always_includes_at_least_one_key() {
+        let keys = get_linux_keys(Browser::Chrome);
+        assert!(!keys.is_empty());
     }
 }
