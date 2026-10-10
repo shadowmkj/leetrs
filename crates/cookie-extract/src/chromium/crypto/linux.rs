@@ -60,17 +60,17 @@ pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
         if let Ok(out) = Command::new("secret-tool")
             .args(["lookup", attr, val])
             .output()
+            && out.status.success()
+            && !out.stdout.is_empty()
         {
-            if out.status.success() && !out.stdout.is_empty() {
-                let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !pass.is_empty() {
-                    log::debug!(
-                        "Found SecretService password for attribute {}={}",
-                        attr,
-                        val
-                    );
-                    passwords.insert(pass);
-                }
+            let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !pass.is_empty() {
+                log::debug!(
+                    "Found SecretService password for attribute {}={}",
+                    attr,
+                    val
+                );
+                passwords.insert(pass);
             }
         }
     }
@@ -86,17 +86,17 @@ pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
         if let Ok(out) = Command::new("kwallet-query")
             .args(["-f", folder, "kdewallet", "-r", key_name])
             .output()
+            && out.status.success()
+            && !out.stdout.is_empty()
         {
-            if out.status.success() && !out.stdout.is_empty() {
-                let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !pass.is_empty() {
-                    log::debug!(
-                        "Found KWallet password in folder {} for key {}",
-                        folder,
-                        key_name
-                    );
-                    passwords.insert(pass);
-                }
+            let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !pass.is_empty() {
+                log::debug!(
+                    "Found KWallet password in folder {} for key {}",
+                    folder,
+                    key_name
+                );
+                passwords.insert(pass);
             }
         }
     }

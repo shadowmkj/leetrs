@@ -56,11 +56,11 @@ impl CookieExtractor for ChromiumExtractor {
                     {
                         let mut decrypted = String::new();
                         for key in &keys {
-                            if let Ok(res) = crypto::linux::decrypt_v10_linux(key, &encrypted) {
-                                if !res.is_empty() {
-                                    decrypted = res;
-                                    break;
-                                }
+                            if let Ok(res) = crypto::linux::decrypt_v10_linux(key, &encrypted)
+                                && !res.is_empty()
+                            {
+                                decrypted = res;
+                                break;
                             }
                         }
                         decrypted
