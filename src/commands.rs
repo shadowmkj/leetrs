@@ -61,6 +61,12 @@ pub fn handle_auth() {
         _ => unreachable!(),
     };
 
+    log::debug!(
+        "handle_auth selection: {}, result: {:?}",
+        selection,
+        credentials_result.is_ok()
+    );
+
     match credentials_result {
         Ok(creds) => match creds.save() {
             Ok(_) => println!("\n✅ Authentication successful!"),

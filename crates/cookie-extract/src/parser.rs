@@ -10,6 +10,8 @@ pub fn parse_raw_cookie_header(input: &str) -> Result<Vec<Cookie>, ExtractError>
         return Err(ExtractError::InvalidHeaderFormat);
     }
 
+    log::debug!("Parsing raw cookie input (input len: {})", trimmed.len());
+
     // Extract cookie body if inside a cURL command (-H 'cookie: ...' or -b '...')
     let cookie_body = extract_cookie_body_from_curl_or_header(trimmed);
 
@@ -20,6 +22,8 @@ pub fn parse_raw_cookie_header(input: &str) -> Result<Vec<Cookie>, ExtractError>
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
+
+    log::debug!("Extracted {} candidate token pairs", tokens.len());
 
     for token in tokens {
         if let Some((key, val)) = token.split_once('=') {
@@ -42,6 +46,8 @@ pub fn parse_raw_cookie_header(input: &str) -> Result<Vec<Cookie>, ExtractError>
             }
         }
     }
+
+    log::debug!("Parsed {} valid cookie key-value pairs", cookies.len());
 
     if cookies.is_empty() {
         Err(ExtractError::InvalidHeaderFormat)

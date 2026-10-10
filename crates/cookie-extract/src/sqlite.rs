@@ -17,11 +17,18 @@ impl SafeSqliteReader {
     /// to a temporary file, then opens a read-only SQLite connection.
     pub fn open_copy_at(source_path: &Path) -> Result<Self, ExtractError> {
         if !source_path.exists() {
+            log::debug!("Database file does not exist at {:?}", source_path);
             return Err(ExtractError::DatabaseNotFound(source_path.to_path_buf()));
         }
 
         let temp_file = NamedTempFile::new()
             .map_err(|e| ExtractError::DatabaseError(format!("Failed to create temp db: {}", e)))?;
+
+        log::debug!(
+            "Copying SQLite database from {:?} to temporary location {:?}",
+            source_path,
+            temp_file.path()
+        );
 
         // Copy primary database file
         fs::copy(source_path, temp_file.path()).map_err(|e| {
@@ -34,11 +41,13 @@ impl SafeSqliteReader {
         // Also copy companion WAL / SHM files if they exist to capture uncommitted/active transactions
         let wal_source = source_path.with_extension("sqlite-wal");
         if wal_source.exists() {
+            log::debug!("Copying companion WAL file {:?}", wal_source);
             let _ = fs::copy(&wal_source, temp_file.path().with_extension("sqlite-wal"));
         }
 
         let shm_source = source_path.with_extension("sqlite-shm");
         if shm_source.exists() {
+            log::debug!("Copying companion SHM file {:?}", shm_source);
             let _ = fs::copy(&shm_source, temp_file.path().with_extension("sqlite-shm"));
         }
 
@@ -49,6 +58,8 @@ impl SafeSqliteReader {
         .map_err(|e| {
             ExtractError::DatabaseError(format!("Failed to open SQLite connection: {}", e))
         })?;
+
+        log::debug!("Successfully connected to temporary SQLite database copy");
 
         Ok(Self {
             _temp_file: temp_file,
@@ -61,6 +72,7 @@ impl SafeSqliteReader {
     where
         F: FnMut(&Row) -> rusqlite::Result<T>,
     {
+        log::debug!("Executing SQLite query: {}", sql);
         let mut stmt = self
             .conn
             .prepare(sql)
@@ -77,6 +89,7 @@ impl SafeSqliteReader {
             })?;
             results.push(item);
         }
+        log::debug!("SQLite query returned {} rows", results.len());
         Ok(results)
     }
 }

@@ -73,6 +73,13 @@ pub fn find_chromium_cookie_db(browser: Browser) -> Result<PathBuf, ExtractError
         candidate_user_data_dirs.push(base_dirs.config_dir().join(win_dir));
     }
 
+    log::debug!(
+        "Scanning {} candidate user data dirs for {:?}: {:?}",
+        candidate_user_data_dirs.len(),
+        browser,
+        candidate_user_data_dirs
+    );
+
     let profile_candidates = ["Default", "Profile 1", "Profile 2", ""];
 
     for user_data_dir in &candidate_user_data_dirs {
@@ -85,16 +92,28 @@ pub fn find_chromium_cookie_db(browser: Browser) -> Result<PathBuf, ExtractError
 
             // Modern Chromium stores in Network/Cookies, legacy stores in Cookies
             let network_cookies = profile_dir.join("Network").join("Cookies");
+            log::debug!("Checking for Chromium cookies at {:?}", network_cookies);
             if network_cookies.exists() {
+                log::debug!("Found Chromium cookie database at {:?}", network_cookies);
                 return Ok(network_cookies);
             }
 
             let legacy_cookies = profile_dir.join("Cookies");
+            log::debug!(
+                "Checking for legacy Chromium cookies at {:?}",
+                legacy_cookies
+            );
             if legacy_cookies.exists() {
+                log::debug!(
+                    "Found legacy Chromium cookie database at {:?}",
+                    legacy_cookies
+                );
                 return Ok(legacy_cookies);
             }
         }
     }
+
+    log::debug!("No Chromium cookie database found for {:?}", browser);
 
     Err(ExtractError::DatabaseNotFound(
         candidate_user_data_dirs

@@ -51,6 +51,11 @@ pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
     secret_tool_queries.push(("application", "chromium"));
     secret_tool_queries.push(("application", "chrome"));
 
+    log::debug!(
+        "Querying SecretService via secret-tool across {} attribute combinations",
+        secret_tool_queries.len()
+    );
+
     for (attr, val) in secret_tool_queries {
         if let Ok(out) = Command::new("secret-tool")
             .args(["lookup", attr, val])
@@ -59,6 +64,11 @@ pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
             if out.status.success() && !out.stdout.is_empty() {
                 let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !pass.is_empty() {
+                    log::debug!(
+                        "Found SecretService password for attribute {}={}",
+                        attr,
+                        val
+                    );
                     passwords.insert(pass);
                 }
             }
@@ -80,6 +90,11 @@ pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
             if out.status.success() && !out.stdout.is_empty() {
                 let pass = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !pass.is_empty() {
+                    log::debug!(
+                        "Found KWallet password in folder {} for key {}",
+                        folder,
+                        key_name
+                    );
                     passwords.insert(pass);
                 }
             }
@@ -88,6 +103,11 @@ pub fn get_linux_keys(browser: Browser) -> Vec<Vec<u8>> {
 
     // 3. Always include default "peanuts" password
     passwords.insert("peanuts".to_string());
+
+    log::debug!(
+        "Deriving Linux AES keys via PBKDF2 for {} distinct password candidates",
+        passwords.len()
+    );
 
     // Derive 128-bit keys via PBKDF2 (1 iteration, salt "saltysalt")
     passwords

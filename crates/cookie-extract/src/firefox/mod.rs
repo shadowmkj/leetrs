@@ -12,6 +12,7 @@ pub struct FirefoxExtractor;
 impl CookieExtractor for FirefoxExtractor {
     fn extract_cookies(&self, domains: &[&str]) -> Result<Vec<Cookie>, ExtractError> {
         let db_path = profiles::find_firefox_cookie_db()?;
+        log::debug!("Opening Firefox SQLite reader at {:?}", db_path);
         let reader = SafeSqliteReader::open_copy_at(&db_path)?;
 
         let mut all_cookies = Vec::new();
@@ -29,6 +30,11 @@ impl CookieExtractor for FirefoxExtractor {
                     expires_at: row.get(4).ok(),
                 })
             })?;
+            log::debug!(
+                "Found {} Firefox cookies matching domain filter '%{}%'",
+                cookies.len(),
+                domain
+            );
             all_cookies.extend(cookies);
         }
 

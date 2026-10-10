@@ -74,6 +74,8 @@ pub fn manual_auth_flow() -> Result<LeetCodeCredentials, String> {
     let cookies = parse_raw_cookie_header(&raw_input)
         .map_err(|e| format!("Could not parse cookie string: {}", e))?;
 
+    log::debug!("Manual auth parsed {} total cookies", cookies.len());
+
     let mut session_cookie = None;
     let mut csrf_token = None;
 
@@ -84,6 +86,12 @@ pub fn manual_auth_flow() -> Result<LeetCodeCredentials, String> {
             csrf_token = Some(cookie.value);
         }
     }
+
+    log::debug!(
+        "Manual auth tokens found: LEETCODE_SESSION={}, csrftoken={}",
+        session_cookie.is_some(),
+        csrf_token.is_some()
+    );
 
     match (session_cookie, csrf_token) {
         (Some(session), Some(csrf)) => Ok(LeetCodeCredentials {
@@ -113,9 +121,19 @@ pub fn auto_extract_flow(browser_name: &str) -> Result<LeetCodeCredentials, Stri
         browser.as_str()
     );
 
+    log::debug!("Starting browser cookie extraction for {:?}", browser);
+
     let domains = ["leetcode.com", ".leetcode.com"];
-    let cookies = extract(browser, &domains)
-        .map_err(|e| format!("{} extraction failed: {}", browser.as_str(), e))?;
+    let cookies = extract(browser, &domains).map_err(|e| {
+        log::debug!("Browser extraction failed with error: {:?}", e);
+        format!("{} extraction failed: {}", browser.as_str(), e)
+    })?;
+
+    log::debug!(
+        "Extracted {} candidate cookies from {:?}",
+        cookies.len(),
+        browser
+    );
 
     let mut session_cookie = None;
     let mut csrf_token = None;
@@ -127,6 +145,12 @@ pub fn auto_extract_flow(browser_name: &str) -> Result<LeetCodeCredentials, Stri
             csrf_token = Some(cookie.value);
         }
     }
+
+    log::debug!(
+        "Auto extraction tokens found: LEETCODE_SESSION={}, csrftoken={}",
+        session_cookie.is_some(),
+        csrf_token.is_some()
+    );
 
     match (session_cookie, csrf_token) {
         (Some(session), Some(csrf)) => Ok(LeetCodeCredentials {

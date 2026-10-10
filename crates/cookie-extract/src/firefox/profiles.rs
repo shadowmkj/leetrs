@@ -64,37 +64,62 @@ pub fn find_firefox_cookie_db() -> Result<PathBuf, ExtractError> {
         candidate_roots.push(base_dirs.config_dir().join("Waterfox"));
     }
 
+    log::debug!(
+        "Scanning {} candidate Firefox roots: {:?}",
+        candidate_roots.len(),
+        candidate_roots
+    );
+
     // Try finding via profiles.ini across all candidate roots
     for profiles_root in &candidate_roots {
         let ini_path = profiles_root.join("profiles.ini");
+        log::debug!("Checking for profiles.ini at {:?}", ini_path);
         if let Ok(ini_content) = fs::read_to_string(&ini_path)
             && let Some((profile_subpath, is_relative)) = parse_default_profile_info(&ini_content)
         {
             let profile_dir = if is_relative {
-                profiles_root.join(profile_subpath)
+                profiles_root.join(&profile_subpath)
             } else {
-                PathBuf::from(profile_subpath)
+                PathBuf::from(&profile_subpath)
             };
+
+            log::debug!(
+                "Parsed default profile '{}' (is_relative: {}) -> {:?}",
+                profile_subpath,
+                is_relative,
+                profile_dir
+            );
 
             let cookie_db = profile_dir.join("cookies.sqlite");
             if cookie_db.exists() {
+                log::debug!("Found Firefox cookie database at {:?}", cookie_db);
                 return Ok(cookie_db);
             }
         }
 
         // Direct search fallback in case profiles.ini is absent or custom-named
         if let Ok(entries) = fs::read_dir(profiles_root) {
+            log::debug!(
+                "Scanning directories in {:?} for direct cookies.sqlite...",
+                profiles_root
+            );
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() {
                     let direct_cookie_db = path.join("cookies.sqlite");
                     if direct_cookie_db.exists() {
+                        log::debug!(
+                            "Found Firefox cookie database via direct scan at {:?}",
+                            direct_cookie_db
+                        );
                         return Ok(direct_cookie_db);
                     }
                 }
             }
         }
     }
+
+    log::debug!("No Firefox cookies.sqlite found in any candidate roots");
 
     Err(ExtractError::DatabaseNotFound(
         candidate_roots

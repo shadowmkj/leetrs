@@ -25,6 +25,12 @@ pub fn get_macos_key(browser: Browser) -> Result<Vec<u8>, ExtractError> {
         _ => "Chrome",
     };
 
+    log::debug!(
+        "Querying macOS Keychain for service: '{}', account: '{}'",
+        service_name,
+        account_name
+    );
+
     // Try reading via macOS `security` CLI
     let output = Command::new("security")
         .args([
@@ -38,8 +44,15 @@ pub fn get_macos_key(browser: Browser) -> Result<Vec<u8>, ExtractError> {
         .output();
 
     let password = match output {
-        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        Ok(out) if out.status.success() => {
+            log::debug!("Successfully retrieved Keychain password using service + account query");
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        }
         _ => {
+            log::debug!(
+                "Exact service+account query failed; trying fallback query with service only ('{}')...",
+                service_name
+            );
             // Fallback: try querying just by service name without account
             let fallback_out = Command::new("security")
                 .args(["find-generic-password", "-w", "-s", service_name])
@@ -47,17 +60,20 @@ pub fn get_macos_key(browser: Browser) -> Result<Vec<u8>, ExtractError> {
                 .map_err(|e| ExtractError::KeyRetrievalError(e.to_string()))?;
 
             if !fallback_out.status.success() {
+                log::debug!("macOS Keychain fallback query also failed");
                 return Err(ExtractError::KeyRetrievalError(format!(
                     "Failed to query Keychain for service '{}'",
                     service_name
                 )));
             }
+            log::debug!("Successfully retrieved Keychain password using fallback service query");
             String::from_utf8_lossy(&fallback_out.stdout)
                 .trim()
                 .to_string()
         }
     };
 
+    log::debug!("Deriving 128-bit key via PBKDF2 (1003 iterations, salt: 'saltysalt')...");
     let mut key = [0u8; 16];
     pbkdf2_hmac::<Sha1>(password.as_bytes(), b"saltysalt", 1003, &mut key);
     Ok(key.to_vec())

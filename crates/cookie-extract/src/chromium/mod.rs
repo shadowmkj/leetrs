@@ -18,6 +18,11 @@ pub struct ChromiumExtractor {
 impl CookieExtractor for ChromiumExtractor {
     fn extract_cookies(&self, domains: &[&str]) -> Result<Vec<Cookie>, ExtractError> {
         let db_path = profiles::find_chromium_cookie_db(self.browser)?;
+        log::debug!(
+            "Opening Chromium SQLite reader for {:?} at {:?}",
+            self.browser,
+            db_path
+        );
         let reader = SafeSqliteReader::open_copy_at(&db_path)?;
 
         #[cfg(target_os = "macos")]
@@ -76,6 +81,11 @@ impl CookieExtractor for ChromiumExtractor {
                     expires_at: expires,
                 })
             })?;
+            log::debug!(
+                "Found {} Chromium cookies matching domain filter '%{}%'",
+                cookies.len(),
+                domain
+            );
             all_cookies.extend(cookies);
         }
 
