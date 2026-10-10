@@ -15,6 +15,10 @@ use leetrs::{
 #[command(about = "A Neovim-integrated LeetCode TUI", long_about = None)]
 #[command(version)]
 struct Cli {
+    /// Enable verbose diagnostic logging
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -61,6 +65,13 @@ fn parse_identifier(s: &str) -> Result<Identifier, String> {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    let mut builder = env_logger::Builder::from_default_env();
+    if cli.verbose {
+        builder.filter_level(log::LevelFilter::Debug);
+    }
+    let _ = builder.try_init();
+
     let config = Config::new().expect("Error parsing config file");
     CONFIG.set(config).expect("Config already initialized");
 

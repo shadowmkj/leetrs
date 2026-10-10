@@ -16,7 +16,7 @@ The Rust codebase (`src/`) is organized into dedicated modules:
 
 | Module | Source File | Description |
 |---|---|---|
-| **`auth`** | `src/auth.rs` | Encapsulates browser cookie extraction (`rookie`) and credential persistence |
+| **`auth`** | `src/auth.rs` | Encapsulates browser cookie extraction (`cookie-extract`) and credential persistence |
 | **`client`** | `src/client.rs` | Authenticated HTTP client managing LeetCode REST and GraphQL API queries |
 | **`models`** | `src/models/` | Serde-compatible data models (`ProblemSummary`, `Question`, `Submission`, `Language`) |
 | **`picker`** | `src/picker.rs` | Main workflow orchestrator connecting client, caching, disk I/O, and editor launching |

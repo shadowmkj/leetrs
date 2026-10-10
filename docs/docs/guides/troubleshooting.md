@@ -14,12 +14,12 @@ Common questions and resolution steps for issues encountered while using `leetrs
 
 ### Cookie extraction fails during `leetrs auth`
 
-**Symptoms**: Error message `Failed to extract cookies from Firefox/Chrome`.
+**Symptoms**: Error message `Failed to extract cookies from <browser>`.
 
 **Solutions**:
-1. Open Chrome/Firefox and verify that you are logged into [leetcode.com](https://leetcode.com).
-2. If using containerized browsers (Snap or Flatpak on Ubuntu/Debian), browser profiles are stored in non-standard sandboxed locations. Choose **"Paste tokens manually"** in `leetrs auth`.
-3. If using Firefox on Linux, ensure Firefox is closed so the SQLite cookie database file lock is released.
+1. Open your browser and verify that you are logged into [leetcode.com](https://leetcode.com).
+2. Run with verbose diagnostic logging: `leetrs --verbose auth` (or `leetrs -v auth`) to see exactly which database paths and keyring keys were scanned.
+3. If using an unsupported browser or SSH session, choose **"Paste cURL / Cookie header manually"**: in your browser's Developer Tools (`F12` → **Network** tab), right click any request → **Copy as cURL**, and paste directly into `leetrs auth`.
 
 ---
 

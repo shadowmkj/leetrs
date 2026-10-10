@@ -17,7 +17,13 @@ Launches the interactive authentication prompt to obtain and store LeetCode sess
 ### Usage
 
 ```bash
+# Standard interactive authentication
 leetrs auth
+
+# With verbose diagnostic logging
+leetrs --verbose auth
+# or
+leetrs -v auth
 ```
 
 ### Prompt Options
@@ -26,14 +32,18 @@ leetrs auth
 🔒 LeetCode Authentication
 
 ? How would you like to authenticate?
-❯ Paste tokens manually
+❯ Auto-detect browser (Recommended)
+  Paste cURL / Cookie header manually
   Extract from Firefox
   Extract from Chrome
+  Extract from Brave
+  Extract from Edge
+  Extract from Arc
 ```
 
-1. **Paste tokens manually**: Prompts for `LEETCODE_SESSION` and `csrftoken` strings.
-2. **Extract from Firefox**: Decrypts Firefox profile cookies automatically.
-3. **Extract from Chrome**: Decrypts Chrome profile cookies automatically.
+1. **Auto-detect browser**: Scans available browser profile databases and automatically extracts cookies from the active session.
+2. **Paste cURL / Cookie header manually**: Allows pasting a full copied cURL command or raw `Cookie:` header from browser Developer Tools.
+3. **Extract from specific browser**: Direct extraction targeting Firefox, Chrome, Brave, Edge, or Arc.
 
 ---
 

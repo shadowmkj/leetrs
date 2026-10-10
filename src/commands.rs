@@ -36,9 +36,13 @@ pub fn handle_auth() {
     println!("🔒 LeetCode Authentication\n");
 
     let options = &[
-        "Paste tokens manually",
+        "Auto-detect browser (Recommended)",
+        "Paste cURL / Cookie header manually",
         "Extract from Firefox",
         "Extract from Chrome",
+        "Extract from Brave",
+        "Extract from Edge",
+        "Extract from Arc",
     ];
 
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -49,11 +53,21 @@ pub fn handle_auth() {
         .unwrap();
 
     let credentials_result = match selection {
-        0 => manual_auth_flow(),
-        1 => auto_extract_flow("firefox"),
-        2 => auto_extract_flow("chrome"),
+        0 => auto_extract_flow("auto"),
+        1 => manual_auth_flow(),
+        2 => auto_extract_flow("firefox"),
+        3 => auto_extract_flow("chrome"),
+        4 => auto_extract_flow("brave"),
+        5 => auto_extract_flow("edge"),
+        6 => auto_extract_flow("arc"),
         _ => unreachable!(),
     };
+
+    log::debug!(
+        "handle_auth selection: {}, result: {:?}",
+        selection,
+        credentials_result.is_ok()
+    );
 
     match credentials_result {
         Ok(creds) => match creds.save() {

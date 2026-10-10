@@ -26,39 +26,40 @@ You will see an interactive prompt powered by `dialoguer`:
 🔒 LeetCode Authentication
 
 ? How would you like to authenticate?
-❯ Paste tokens manually
+❯ Auto-detect browser (Recommended)
+  Paste cURL / Cookie header manually
   Extract from Firefox
   Extract from Chrome
+  Extract from Brave
+  Extract from Edge
+  Extract from Arc
 ```
 
 ---
 
 ## 🌐 Option 1: Automatic Cookie Extraction
 
-If you are already logged into LeetCode in **Chrome** or **Firefox**, select:
-- `Extract from Firefox`
-- `Extract from Chrome`
+If you are already logged into LeetCode in any supported browser (**Firefox**, **Chrome**, **Brave**, **Edge**, **Arc**, or privacy forks like **LibreWolf**, **Floorp**, **Waterfox**), select:
+- `Auto-detect browser (Recommended)`
+- Or specify your browser directly from the menu.
 
-`leetrs` uses the [`rookie`](https://crates.io/crates/rookie) crate to decrypt and extract active browser cookies without requiring browser extensions or external helpers.
+`leetrs` uses the internal [`cookie-extract`](https://github.com/shadowmkj/leetrs/tree/main/crates/cookie-extract) crate to safely copy and decrypt active browser cookies across macOS, Arch Linux, Debian/Ubuntu, Flatpak, and Snap without requiring browser extensions or external helpers.
 
 :::tip[Prerequisites for Automatic Extraction]
 - You must be logged into [leetcode.com](https://leetcode.com) in the chosen browser.
-- Close the browser if keyrings/databases are locked by exclusive file locks on Linux.
+- Multi-profile and live sessions are supported safely via isolated temporary database staging.
 :::
 
 ---
 
-## ✍️ Option 2: Manual Token Fallback
+## ✍️ Option 2: Single-Paste cURL / Header Fallback
 
-If you are using containerized browsers (Snap / Flatpak), custom profile paths, Brave, Arc, or a headless server:
+If you are on a headless server, remote SSH session, or unsupported environment:
 
-1. Select `Paste tokens manually`.
-2. Open [leetcode.com](https://leetcode.com) in your browser and open **Developer Tools** (`F12` or `Cmd+Option+I`).
-3. Navigate to **Application** (Chrome) or **Storage** (Firefox) → **Cookies** → `https://leetcode.com`.
-4. Copy the values of:
-   - `LEETCODE_SESSION`
-   - `csrftoken`
-5. Paste them into the interactive prompts in `leetrs auth`.
+1. Select `Paste cURL / Cookie header manually`.
+2. Open [leetcode.com](https://leetcode.com) in your browser and open **Developer Tools** (`F12` or `Cmd+Option+I`) → **Network** tab.
+3. Right click any `graphql` or `api` request → **Copy** → **Copy as cURL** (or copy the raw `Cookie:` header).
+4. Paste the entire string into the single prompt in `leetrs auth`. `leetrs` will automatically parse `LEETCODE_SESSION` and `csrftoken`.
 
 ---
 

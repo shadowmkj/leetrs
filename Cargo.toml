@@ -11,6 +11,7 @@ license.workspace = true
 members = [
   ".",
   "xtask",
+  "crates/cookie-extract",
 ]
 
 [workspace.package]
@@ -31,13 +32,15 @@ html2md = "0.2.15"
 open = "5.3.3"
 ratatui = "0.30.0"
 reqwest = { version = "0.13.2", features = ["cookies", "json"] }
-rookie = "0.5.6"
+cookie-extract = { path = "crates/cookie-extract" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.18"
 tokio = { version = "1.51.1", features = ["full"] }
 toml = "1.1.2"
 tui-input = "0.15.1"
+log = "0.4"
+env_logger = "0.11"
 
 # The profile that 'dist' will build with
 [profile.dist]

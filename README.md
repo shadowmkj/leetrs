@@ -72,8 +72,8 @@ https://github.com/user-attachments/assets/86783e7e-afc6-449a-828b-c29e34fa9dbb
   - Quick keys to toggle help popups or open selected problems directly in your system browser.
 
 - 🔑 **Intelligent Cookie Authentication (`leetrs auth`)**
-  - Automatically extracts `LEETCODE_SESSION` and `csrftoken` cookies from active **Chrome** or **Firefox** sessions.
-  - Includes a secure manual token fallback for containerized or custom browser profiles.
+  - Automatically extracts `LEETCODE_SESSION` and `csrftoken` cookies across **Firefox**, **Chrome**, **Brave**, **Edge**, and **Arc** on macOS and Linux (including Snap, Flatpak, and privacy forks).
+  - Supports single-paste cURL commands and raw `Cookie:` headers for instant manual authentication.
 
 - 📝 **Frictionless Problem Fetching (`leetrs pick`)**
   - Fetch problems using URL slugs (e.g., `two-sum`) or numerical IDs (e.g., `1`).
@@ -96,7 +96,7 @@ https://github.com/user-attachments/assets/86783e7e-afc6-449a-828b-c29e34fa9dbb
 |---|---|---|
 | [Neovim](https://neovim.io/) | 0.9+ | Must be available as `nvim` in your `$PATH` |
 | [LeetCode Account](https://leetcode.com/) | — | Required for authentication and submission |
-| Google Chrome or Firefox | Any | Used for automatic browser cookie extraction |
+| Supported Browser | Firefox, Chrome, Brave, Edge, Arc | Used for automatic browser cookie extraction |
 | [Rust Toolchain](https://rustup.rs/) | 1.70+ | Required only if installing via Cargo or building from source |
 
 ---
@@ -229,7 +229,7 @@ leetrs submit two_sum.rs
 
 | Subcommand | Arguments / Flags | Description |
 |---|---|---|
-| `auth` | — | Interactively extracts cookies from Chrome/Firefox or accepts manual tokens. |
+| `auth` | `[-v, --verbose]` | Interactively extracts cookies across browsers or accepts single-paste cURL / Cookie headers. |
 | `tui` | `[language]` | Launches the interactive TUI problem browser. Optionally set temporary language override. |
 | `pick` | `<identifier> [language] [-p, --preview]` | Fetches problem, creates files, and opens editor. Identifier can be a slug (`two-sum`) or ID (`1`). `--preview` prints markdown to stdout. |
 | `test` | `<file>` | Tests local solution file against sample test cases without official submission. |
@@ -292,9 +292,9 @@ When navigating the interactive TUI (`leetrs tui`), the following keybindings ar
 <details>
 <summary><b>Automatic cookie extraction fails during <code>leetrs auth</code></b></summary>
 
-- Ensure you are logged into [leetcode.com](https://leetcode.com) in your selected browser (Chrome or Firefox).
-- If using containerized browser packages (such as Snap or Flatpak on Linux) or custom profile paths, select **"Paste tokens manually"** during `leetrs auth`.
-- Tokens can be obtained from your browser's Developer Tools (`F12` → **Application/Storage** → **Cookies** → `leetcode.com`): copy `LEETCODE_SESSION` and `csrftoken`.
+- Ensure you are logged into [leetcode.com](https://leetcode.com) in your selected browser (Firefox, Chrome, Brave, Edge, Arc).
+- Run `leetrs --verbose auth` (or `leetrs -v auth`) to view detailed diagnostic logging and database discovery paths.
+- Alternatively, select **"Paste cURL / Cookie header manually"**: in your browser's Developer Tools (`F12` → **Network** tab), right click any request → **Copy as cURL**, and paste into `leetrs auth`.
 </details>
 
 <details>

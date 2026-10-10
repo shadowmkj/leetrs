@@ -3,6 +3,7 @@
 //! Credentials are persisted as a JSON file in the OS-standard config directory
 //! (`ProjectDirs::config_dir()` via the `directories` crate, e.g.
 //! `~/.config/leetrs/` on Linux / macOS).
+use cookie_extract::{Browser, extract, parse_raw_cookie_header};
 use dialoguer::Password;
 use dialoguer::theme::ColorfulTheme;
 use directories::ProjectDirs;
@@ -15,7 +16,7 @@ use std::path::PathBuf;
 /// Both values are obtained either by extracting them directly from a running
 /// browser session ([`auto_extract_flow`]) or by having the user paste them
 /// manually ([`manual_auth_flow`]).
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct LeetCodeCredentials {
     /// Value of the `LEETCODE_SESSION` cookie.
     pub session_cookie: String,
@@ -60,48 +61,24 @@ impl LeetCodeCredentials {
     }
 }
 
-/// Handles prompting the user to paste their tokens manually
+/// Handles prompting the user to paste their cURL command, raw `Cookie:` header, or tokens.
 pub fn manual_auth_flow() -> Result<LeetCodeCredentials, String> {
-    println!("\nPlease extract your cookies from your browser session.");
-    println!("(Developer Tools -> Application -> Cookies -> leetcode.com)\n");
+    println!("\nPaste your cURL command, 'Cookie:' header, or tokens from your browser session:");
+    println!("(Developer Tools -> Network tab -> Right click any request -> 'Copy as cURL')\n");
 
-    let session_cookie = Password::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter LEETCODE_SESSION cookie")
+    let raw_input = Password::with_theme(&ColorfulTheme::default())
+        .with_prompt("Paste header or cURL command")
         .interact()
         .map_err(|e| e.to_string())?;
 
-    let csrf_token = Password::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter csrftoken cookie")
-        .interact()
-        .map_err(|e| e.to_string())?;
+    let cookies = parse_raw_cookie_header(&raw_input)
+        .map_err(|e| format!("Could not parse cookie string: {}", e))?;
 
-    Ok(LeetCodeCredentials {
-        session_cookie,
-        csrf_token,
-    })
-}
-
-/// Automatically extracts LeetCode cookies from the specified browser
-pub fn auto_extract_flow(browser: &str) -> Result<LeetCodeCredentials, String> {
-    println!("\n🔍 Attempting to extract cookies from {}...", browser);
-
-    // We only want to query cookies belonging to LeetCode to speed up the process
-    let domains = Some(vec!["leetcode.com".to_string()]);
-
-    let cookies = match browser {
-        "chrome" => {
-            rookie::chrome(domains).map_err(|e| format!("Chrome extraction failed: {}", e))?
-        }
-        "firefox" => {
-            rookie::firefox(domains).map_err(|e| format!("Firefox extraction failed: {}", e))?
-        }
-        _ => return Err("Unsupported browser".into()),
-    };
+    log::debug!("Manual auth parsed {} total cookies", cookies.len());
 
     let mut session_cookie = None;
     let mut csrf_token = None;
 
-    // Search the returned cookies for the two we care about
     for cookie in cookies {
         if cookie.name == "LEETCODE_SESSION" {
             session_cookie = Some(cookie.value);
@@ -109,6 +86,71 @@ pub fn auto_extract_flow(browser: &str) -> Result<LeetCodeCredentials, String> {
             csrf_token = Some(cookie.value);
         }
     }
+
+    log::debug!(
+        "Manual auth tokens found: LEETCODE_SESSION={}, csrftoken={}",
+        session_cookie.is_some(),
+        csrf_token.is_some()
+    );
+
+    match (session_cookie, csrf_token) {
+        (Some(session), Some(csrf)) => Ok(LeetCodeCredentials {
+            session_cookie: session,
+            csrf_token: csrf,
+        }),
+        _ => {
+            Err("Could not find both LEETCODE_SESSION and csrftoken in the provided input.".into())
+        }
+    }
+}
+
+/// Automatically extracts LeetCode cookies from the specified browser.
+pub fn auto_extract_flow(browser_name: &str) -> Result<LeetCodeCredentials, String> {
+    let browser = match browser_name.to_lowercase().as_str() {
+        "auto" | "autodetect" => Browser::AutoDetect,
+        "chrome" => Browser::Chrome,
+        "firefox" => Browser::Firefox,
+        "brave" => Browser::Brave,
+        "edge" => Browser::Edge,
+        "arc" => Browser::Arc,
+        _ => return Err("Unsupported browser".into()),
+    };
+
+    println!(
+        "\n🔍 Attempting to extract cookies from {}...",
+        browser.as_str()
+    );
+
+    log::debug!("Starting browser cookie extraction for {:?}", browser);
+
+    let domains = ["leetcode.com", ".leetcode.com"];
+    let cookies = extract(browser, &domains).map_err(|e| {
+        log::debug!("Browser extraction failed with error: {:?}", e);
+        format!("{} extraction failed: {}", browser.as_str(), e)
+    })?;
+
+    log::debug!(
+        "Extracted {} candidate cookies from {:?}",
+        cookies.len(),
+        browser
+    );
+
+    let mut session_cookie = None;
+    let mut csrf_token = None;
+
+    for cookie in cookies {
+        if cookie.name == "LEETCODE_SESSION" {
+            session_cookie = Some(cookie.value);
+        } else if cookie.name == "csrftoken" {
+            csrf_token = Some(cookie.value);
+        }
+    }
+
+    log::debug!(
+        "Auto extraction tokens found: LEETCODE_SESSION={}, csrftoken={}",
+        session_cookie.is_some(),
+        csrf_token.is_some()
+    );
 
     match (session_cookie, csrf_token) {
         (Some(session), Some(csrf)) => Ok(LeetCodeCredentials {
@@ -142,10 +184,21 @@ mod tests {
 
     #[test]
     fn auto_extract_flow_rejects_unsupported_browsers() {
-        for browser in ["safari", "", "Chrome", "edge", "opera"] {
+        for browser in ["safari", "", "opera", "vivaldi"] {
             let result = auto_extract_flow(browser);
             assert!(result.is_err());
             assert_eq!(result.unwrap_err(), "Unsupported browser");
+        }
+    }
+
+    #[test]
+    fn auto_extract_flow_recognizes_supported_browser_names() {
+        for browser in ["chrome", "firefox", "brave", "edge", "arc", "auto"] {
+            // Should not fail with "Unsupported browser"
+            let result = auto_extract_flow(browser);
+            if let Err(msg) = result {
+                assert_ne!(msg, "Unsupported browser");
+            }
         }
     }
 }
