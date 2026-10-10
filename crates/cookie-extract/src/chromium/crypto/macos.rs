@@ -131,6 +131,39 @@ mod tests {
     }
 
     #[test]
+    fn decrypt_deterministic_v10_round_trip() {
+        use cbc::cipher::BlockEncryptMut;
+        type Aes128CbcEnc = cbc::Encryptor<Aes128>;
+
+        let key = b"0123456789abcdef"; // 16 bytes
+        let iv = [0x20u8; 16]; // 16 spaces
+
+        let dummy_signature = [0xAAu8; 32];
+        let cookie_val = b"deterministic_test_cookie";
+        let mut plaintext = Vec::new();
+        plaintext.extend_from_slice(&dummy_signature);
+        plaintext.extend_from_slice(cookie_val);
+
+        let msg_len = plaintext.len();
+        let block_size = 16;
+        let padded_len = ((msg_len / block_size) + 1) * block_size;
+        let mut buf = vec![0u8; padded_len];
+        buf[..msg_len].copy_from_slice(&plaintext);
+
+        let encryptor = Aes128CbcEnc::new(key.into(), (&iv).into());
+        let encrypted_body = encryptor
+            .encrypt_padded_mut::<cbc::cipher::block_padding::Pkcs7>(&mut buf, msg_len)
+            .expect("Encryption should succeed");
+
+        let mut payload = b"v10".to_vec();
+        payload.extend_from_slice(encrypted_body);
+
+        let decrypted = decrypt_v10_macos(key, &payload).expect("Decryption should succeed");
+        assert_eq!(decrypted, "deterministic_test_cookie");
+    }
+
+    #[test]
+    #[ignore = "requires host macOS Keychain access with active Chrome Safe Storage"]
     fn test_real_macos_chrome_key_and_ciphertext() {
         if let Ok(key) = get_macos_key(Browser::Chrome) {
             let hex_str = "7631306FF11E4D890DB82AF21582B923A29D4315063A6D27126BD8B73E79895F36C7ACEE402C0F39AC35383D0A16B301B172D81891F5457FE5FEC34EF886251CE2F72C";
@@ -139,10 +172,8 @@ mod tests {
                 .map(|i| u8::from_str_radix(&hex_str[i..i + 2], 16).unwrap())
                 .collect::<Vec<u8>>();
             let decrypted = decrypt_v10_macos(&key, &bytes);
-            println!("Decrypted result: {:?}", decrypted);
             assert!(decrypted.is_ok());
             let val = decrypted.unwrap();
-            println!("Decrypted value: {}", val);
             assert!(!val.is_empty());
         }
     }
