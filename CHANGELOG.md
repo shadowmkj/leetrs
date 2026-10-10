@@ -2,11 +2,13 @@
 
 ### 🚀 Features
 
-- *(cookie-extract)* Introduce cross-platform cookie extraction crate - ([9b7bb10](https://github.com/shadowmkj/leetrs/commit/9b7bb10768f8f6ccc91e0f1abf3d20d7e7453df1)) (from [`@Milan Pramod`](https://github.com/Milan Pramod))
-- *(cookie-extract)* Enhance linux encryption key extraction and profile discovery - ([5a1cbea](https://github.com/shadowmkj/leetrs/commit/5a1cbeacd5da4dca0ce18c5da11c533d97673db3)) (from [`@Milan Pramod`](https://github.com/Milan Pramod))
-- *(cookie-extract)* Expand firefox profile discovery for snaps, flatpaks, and forks - ([1daf0a0](https://github.com/shadowmkj/leetrs/commit/1daf0a05c1d91cbeb47402ce813c7419e4a65358)) (from [`@Milan Pramod`](https://github.com/Milan Pramod))
-- *(cookie-extract)* Support multiple linux keyring providers and key candidates - ([67ef989](https://github.com/shadowmkj/leetrs/commit/67ef98971f012c88a72b10fc6dbbcdfbca42f797)) (from [`@Milan Pramod`](https://github.com/Milan Pramod))
-- *(logging)* Add verbose diagnostic logging with env_logger - ([e7452c3](https://github.com/shadowmkj/leetrs/commit/e7452c366badda298c546d35f934279b439dd2d2)) (from [`@Milan Pramod`](https://github.com/Milan Pramod))
+- *(cookie-extract)* Introduce cross-platform cookie extraction crate - ([9b7bb10](https://github.com/shadowmkj/leetrs/commit/9b7bb10768f8f6ccc91e0f1abf3d20d7e7453df1)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cookie-extract)* Enhance linux encryption key extraction and profile discovery - ([5a1cbea](https://github.com/shadowmkj/leetrs/commit/5a1cbeacd5da4dca0ce18c5da11c533d97673db3)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cookie-extract)* Expand firefox profile discovery for snaps, flatpaks, and forks - ([1daf0a0](https://github.com/shadowmkj/leetrs/commit/1daf0a05c1d91cbeb47402ce813c7419e4a65358)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cookie-extract)* Support multiple linux keyring providers and key candidates - ([67ef989](https://github.com/shadowmkj/leetrs/commit/67ef98971f012c88a72b10fc6dbbcdfbca42f797)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(logging)* Add verbose diagnostic logging with env_logger - ([e7452c3](https://github.com/shadowmkj/leetrs/commit/e7452c366badda298c546d35f934279b439dd2d2)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(auth)* Add debug logging for extracted cookies - ([57a8d17](https://github.com/shadowmkj/leetrs/commit/57a8d17a0d96e193620f1dea96ffe6151f078f85)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cookie-extract)* Improve Windows support and sqlite wal handling - ([370440d](https://github.com/shadowmkj/leetrs/commit/370440d89f47a6ffe59526751ba7fa02bc39b9d7)) (from [`@shadowmkj`](https://github.com/shadowmkj))
 
 ### 🐛 Bug Fixes
 
@@ -18,6 +20,9 @@
 - *(changelog)* Update changelog and git-cliff configuration - ([36f4fda](https://github.com/shadowmkj/leetrs/commit/36f4fdacaad0aa335d69c1e51795d4edf5dd15ca)) (from [`@shadowmkj`](https://github.com/shadowmkj))
 - *(changelog)* Update git-cliff configuration and regenerate changelog - ([5502a96](https://github.com/shadowmkj/leetrs/commit/5502a96a6a2f6c5e24f7267cf52f856d4cca1da4)) (from [`@shadowmkj`](https://github.com/shadowmkj))
 - Update contributing guide and pull request template for xtask ([#33](https://github.com/shadowmkj/leetrs/pull/33)) - ([9f73922](https://github.com/shadowmkj/leetrs/commit/9f739224ef19cf460ab63beff77629571cff8f4a)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cookie-extract,xtask)* Simplify nested conditions and add cross-target clippy support - ([364cb46](https://github.com/shadowmkj/leetrs/commit/364cb462f98ec50f537b7cf01fc048f05544c659)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cookie-extract)* Add deterministic v10 decryption round-trip test - ([f35dec1](https://github.com/shadowmkj/leetrs/commit/f35dec18047ef391b4b4889ecce909a37d547f3c)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- Update authentication documentation for expanded browser support and manual cURL parsing - ([e2549d0](https://github.com/shadowmkj/leetrs/commit/e2549d010a6737c323549da3272430d77fef1555)) (from [`@shadowmkj`](https://github.com/shadowmkj))
 ## [v1.1.0](https://github.com/shadowmkj/leetrs/releases/tag/v1.1.0) - 2026-08-19
 
 ### 🚀 Features
