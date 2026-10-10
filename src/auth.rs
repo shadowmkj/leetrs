@@ -139,7 +139,6 @@ pub fn auto_extract_flow(browser_name: &str) -> Result<LeetCodeCredentials, Stri
     let mut csrf_token = None;
 
     for cookie in cookies {
-        log::debug!("Cookie: {:?}", cookie);
         if cookie.name == "LEETCODE_SESSION" {
             session_cookie = Some(cookie.value);
         } else if cookie.name == "csrftoken" {

@@ -41,7 +41,8 @@ pub fn handle_auth() {
         "Extract from Firefox",
         "Extract from Chrome",
         "Extract from Brave",
-        "Extract from Edge / Arc",
+        "Extract from Edge",
+        "Extract from Arc",
     ];
 
     let selection = Select::with_theme(&ColorfulTheme::default())
@@ -58,6 +59,7 @@ pub fn handle_auth() {
         3 => auto_extract_flow("chrome"),
         4 => auto_extract_flow("brave"),
         5 => auto_extract_flow("edge"),
+        6 => auto_extract_flow("arc"),
         _ => unreachable!(),
     };
 

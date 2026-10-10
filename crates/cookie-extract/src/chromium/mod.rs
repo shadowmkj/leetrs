@@ -31,6 +31,9 @@ impl CookieExtractor for ChromiumExtractor {
         #[cfg(target_os = "linux")]
         let keys = crypto::linux::get_linux_keys(self.browser);
 
+        #[cfg(target_os = "windows")]
+        let key = crypto::windows::get_windows_key()?;
+
         let mut all_cookies = Vec::new();
         for domain in domains {
             let sql = format!(
@@ -65,9 +68,17 @@ impl CookieExtractor for ChromiumExtractor {
                         }
                         decrypted
                     }
-                    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+                    #[cfg(target_os = "windows")]
                     {
-                        String::from_utf8_lossy(&encrypted).to_string()
+                        crypto::windows::decrypt_v10_windows(&key, &encrypted).unwrap_or_default()
+                    }
+                    #[cfg(not(any(
+                        target_os = "macos",
+                        target_os = "linux",
+                        target_os = "windows"
+                    )))]
+                    {
+                        String::new()
                     }
                 } else {
                     String::new()
