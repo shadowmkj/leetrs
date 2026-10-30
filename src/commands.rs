@@ -8,7 +8,7 @@ use std::{fs, io, path::Path, process::Command, rc::Rc};
 use clap::CommandFactory;
 use clap_complete::{
     Shell,
-    aot::{Bash, Fish, Zsh},
+    aot::{Bash, Elvish, Fish, PowerShell, Zsh},
     generate,
 };
 use dialoguer::{Select, theme::ColorfulTheme};
@@ -195,16 +195,28 @@ pub async fn handle_submit(file: &str) -> std::result::Result<(), String> {
 }
 
 /// Writes shell completion script for `shell` to stdout.
-pub fn handle_completion<C: CommandFactory>(shell: &Shell) {
-    let mut cmd = C::command();
+pub fn handle_completion<C: CommandFactory>(shell: &Shell) -> std::result::Result<(), String> {
+    write_completion(shell, &mut C::command(), &mut io::stdout())
+}
+
+/// Writes the completion script of `cmd` for `shell` to `out`.
+///
+/// Returns an error for shells that `clap_complete` may add in the future
+/// (`Shell` is `#[non_exhaustive]`) instead of panicking.
+fn write_completion(
+    shell: &Shell,
+    cmd: &mut clap::Command,
+    out: &mut dyn io::Write,
+) -> std::result::Result<(), String> {
     match shell {
-        Shell::Bash => generate(Bash, &mut cmd, "leetrs", &mut io::stdout()),
-        Shell::Zsh => generate(Zsh, &mut cmd, "leetrs", &mut io::stdout()),
-        Shell::Fish => generate(Fish, &mut cmd, "leetrs", &mut io::stdout()),
-        Shell::Elvish => todo!(),
-        Shell::PowerShell => todo!(),
-        _ => todo!(),
+        Shell::Bash => generate(Bash, cmd, "leetrs", out),
+        Shell::Zsh => generate(Zsh, cmd, "leetrs", out),
+        Shell::Fish => generate(Fish, cmd, "leetrs", out),
+        Shell::Elvish => generate(Elvish, cmd, "leetrs", out),
+        Shell::PowerShell => generate(PowerShell, cmd, "leetrs", out),
+        other => return Err(format!("Completion for shell '{other}' is not supported.")),
     }
+    Ok(())
 }
 
 /// Fetches the full problem list and user data, then launches the interactive TUI.
@@ -374,6 +386,20 @@ mod tests {
             resolve_custom_cases(Some("[3,2,4]\r\n6\r\n"), None),
             Ok(Some("[3,2,4]\n6".to_string()))
         );
+    }
+
+    #[test]
+    fn test_write_completion_supports_every_shell() {
+        use clap::ValueEnum;
+        for shell in Shell::value_variants() {
+            let mut cmd = clap::Command::new("leetrs")
+                .arg(clap::Arg::new("verbose").long("verbose").num_args(0));
+            let mut out = Vec::new();
+            write_completion(shell, &mut cmd, &mut out).unwrap_or_else(|e| panic!("{shell}: {e}"));
+            let script = String::from_utf8(out).unwrap();
+            assert!(script.contains("leetrs"), "{shell} script names the binary");
+            assert!(script.contains("verbose"), "{shell} script lists the flags");
+        }
     }
 
     #[test]

@@ -6,7 +6,7 @@ sidebar_position: 6
 
 # 🐚 `leetrs completion`
 
-Generates shell autocomplete scripts for `bash`, `zsh`, and `fish`.
+Generates shell autocomplete scripts for `bash`, `zsh`, `fish`, `elvish`, and `powershell`.
 
 ---
 
@@ -22,7 +22,7 @@ leetrs completion <SHELL>
 
 | Argument | Supported Values | Description |
 |---|---|---|
-| `<SHELL>` | `bash`, `zsh`, `fish` | Target shell environment |
+| `<SHELL>` | `bash`, `zsh`, `fish`, `elvish`, `powershell` | Target shell environment |
 
 ---
 
@@ -51,4 +51,20 @@ Save completion script to fish completions directory:
 
 ```fish
 leetrs completion fish > ~/.config/fish/completions/leetrs.fish
+```
+
+### Elvish Setup
+
+Add completion script to your `~/.config/elvish/rc.elv`:
+
+```elvish
+eval (leetrs completion elvish | slurp)
+```
+
+### PowerShell Setup
+
+Add completion script to your PowerShell profile (`$PROFILE`):
+
+```powershell
+leetrs completion powershell | Out-String | Invoke-Expression
 ```

@@ -113,7 +113,9 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Some(Commands::Completion { shell }) => {
-            commands::handle_completion::<Cli>(shell);
+            if let Err(e) = commands::handle_completion::<Cli>(shell) {
+                eprintln!("❌ {}", e);
+            }
         }
         None => commands::open_tui(&None).await,
     };
