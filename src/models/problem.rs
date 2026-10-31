@@ -18,6 +18,33 @@ pub struct QuestionSnippet {
     pub code: String,
 }
 
+/// The `questionOfToday` GraphQL response: today's Problem of the Day.
+#[derive(Deserialize, Clone, Debug)]
+pub struct DailyChallengeResponse {
+    #[serde(rename = "activeDailyCodingChallengeQuestion")]
+    pub active_daily_coding_challenge_question: ActiveDailyQuestion,
+}
+
+/// Today's Problem of the Day and the date it is active for.
+#[derive(Deserialize, Clone, Debug)]
+pub struct ActiveDailyQuestion {
+    pub date: String,
+    pub question: DailyQuestion,
+}
+
+/// The problem fields `leetrs daily` needs to pick and describe the challenge.
+#[derive(Deserialize, Clone, Debug)]
+pub struct DailyQuestion {
+    #[serde(rename = "questionFrontendId")]
+    pub question_frontend_id: String,
+    pub title: String,
+    #[serde(rename = "titleSlug")]
+    pub title_slug: String,
+    pub difficulty: String,
+    #[serde(rename = "isPaidOnly")]
+    pub is_paid_only: bool,
+}
+
 /// Minimal user profile returned by the `userStatus` GraphQL query.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserDetail {

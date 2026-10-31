@@ -116,6 +116,61 @@ pub async fn handle_pick(
     pick_and_open(&picker, identifier, language, preview).await
 }
 
+/// Fetches today's Problem of the Day and opens it the way `pick` does.
+pub async fn handle_daily(
+    language: &Option<Language>,
+    preview: bool,
+) -> std::result::Result<(), String> {
+    let picker = make_picker().await?;
+    let daily = picker
+        .client
+        .get_daily_challenge()
+        .await
+        .map_err(|e| format!("Failed to fetch today's daily challenge: {}", e))?;
+    let question = &daily.question;
+    // stderr, so `leetrs daily --preview > problem.md` keeps this line out.
+    eprintln!(
+        "📅 Daily challenge for {}: {}. {} ({})",
+        daily.date, question.question_frontend_id, question.title, question.difficulty
+    );
+
+    if question.is_paid_only {
+        let is_premium = picker
+            .client
+            .get_user_detail()
+            .await
+            .ok()
+            .and_then(|user| user.is_premium);
+        if let Some(warning) = premium_only_gate(is_premium)? {
+            eprintln!("{}", warning);
+        }
+    }
+
+    let identifier = Identifier::String(question.title_slug.clone());
+    pick_and_open(&picker, &identifier, language, preview).await
+}
+
+/// Decides whether a premium-only daily problem can be picked.
+///
+/// LeetCode returns no description or code template for a premium problem to
+/// a non-premium account, so picking it would fail on a missing field. Stop
+/// with a clear message when the account is known not to be premium, and only
+/// warn when the profile lookup could not say.
+fn premium_only_gate(
+    is_premium: Option<bool>,
+) -> std::result::Result<Option<&'static str>, String> {
+    match is_premium {
+        Some(true) => Ok(None),
+        Some(false) => Err(
+            "Today's problem is for LeetCode Premium subscribers, and this account is not premium."
+                .to_string(),
+        ),
+        None => Ok(Some(
+            "⚠️ Today's problem is for LeetCode Premium subscribers and premium status could not be confirmed; fetching it may fail.",
+        )),
+    }
+}
+
 /// Runs the solution against example test cases (or custom input from
 /// `cases` / `cases_file`) without recording a submission.
 pub async fn handle_test(
@@ -303,6 +358,13 @@ pub async fn pick_and_open(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn premium_only_gate_by_premium_status() {
+        assert_eq!(premium_only_gate(Some(true)), Ok(None));
+        assert!(premium_only_gate(Some(false)).is_err());
+        assert!(matches!(premium_only_gate(None), Ok(Some(_))));
+    }
 
     #[test]
     fn test_resolve_custom_cases_none_uses_default() {

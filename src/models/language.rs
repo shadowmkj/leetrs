@@ -4,7 +4,7 @@ use clap::ValueEnum;
 /// Supported submission languages.
 ///
 /// The `ValueEnum` derive lets Clap accept these directly as CLI arguments.
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq, Eq)]
 pub enum Language {
     Python,
     Rust,

@@ -26,6 +26,7 @@ const sidebars: SidebarsConfig = {
         'cli-reference/auth-and-status',
         'cli-reference/tui',
         'cli-reference/pick',
+        'cli-reference/daily',
         'cli-reference/test-and-submit',
         'cli-reference/completion',
       ],

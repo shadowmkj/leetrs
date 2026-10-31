@@ -92,6 +92,10 @@ pub trait LeetCodeApi {
             std::collections::HashMap<u64, u64>,
         )>,
     > + Send;
+
+    fn get_daily_challenge(
+        &self,
+    ) -> impl std::future::Future<Output = Result<crate::models::ActiveDailyQuestion>> + Send;
 }
 
 /// A configured `reqwest` HTTP client that authenticates every request with
@@ -418,6 +422,33 @@ impl LeetCodeClient {
         Ok(response.user_status)
     }
 
+    /// Fetches today's Problem of the Day via the `questionOfToday` query.
+    pub async fn get_daily_challenge(&self) -> Result<crate::models::ActiveDailyQuestion> {
+        let query_string = r#"
+                query questionOfToday {
+                  activeDailyCodingChallengeQuestion {
+                    date
+                    question {
+                      questionFrontendId
+                      title
+                      titleSlug
+                      difficulty
+                      isPaidOnly
+                    }
+                  }
+                }
+        "#;
+
+        let query = GraphQLQuery {
+            query: query_string.to_string(),
+            variables: None,
+            operation_name: Some("questionOfToday".to_string()),
+        };
+
+        let response: crate::models::DailyChallengeResponse = self.execute_graphql(query).await?;
+        Ok(response.active_daily_coding_challenge_question)
+    }
+
     /// Fetches all topic tags along with the set of problem IDs tagged under each.
     ///
     /// The response is deeply nested (`questionTopicTags > edges > node`); local
@@ -649,5 +680,11 @@ impl LeetCodeApi for LeetCodeClient {
         )>,
     > + Send {
         LeetCodeClient::get_problem_list(self)
+    }
+
+    fn get_daily_challenge(
+        &self,
+    ) -> impl std::future::Future<Output = Result<crate::models::ActiveDailyQuestion>> + Send {
+        LeetCodeClient::get_daily_challenge(self)
     }
 }

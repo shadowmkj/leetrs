@@ -213,6 +213,9 @@ leetrs tui
 leetrs pick two-sum
 leetrs pick 1
 
+# ...or open today's Problem of the Day (-p to print it instead)
+leetrs daily
+
 # 5. Solve the problem in Neovim, then test against example testcases
 leetrs test two_sum.rs
 
@@ -231,6 +234,7 @@ leetrs submit two_sum.rs
 | `auth` | `[-v, --verbose]` | Interactively extracts cookies across browsers or accepts single-paste cURL / Cookie headers. |
 | `tui` | `[language]` | Launches the interactive TUI problem browser. Optionally set temporary language override. |
 | `pick` | `<identifier> [language] [-p, --preview]` | Fetches problem, creates files, and opens editor. Identifier can be a slug (`two-sum`) or ID (`1`). `--preview` prints markdown to stdout. |
+| `daily` | `[language] [-p, --preview]` | Picks today's LeetCode Problem of the Day, the same way `pick` does. |
 | `test` | `<file>` | Tests local solution file against sample test cases without official submission. |
 | `submit` | `<file>` | Submits solution file to LeetCode for full judging and statistics. |
 | `status` | — | Displays active authentication state and token information. |

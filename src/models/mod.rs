@@ -19,7 +19,8 @@ pub mod submission;
 // working without any changes in other modules.
 pub use language::{Identifier, Language};
 pub use problem::{
-    GraphQLQuery, ProblemSummary, Question, QuestionSnippet, QuestionTopics, Topic, UserDetail,
+    ActiveDailyQuestion, DailyChallengeResponse, DailyQuestion, GraphQLQuery, ProblemSummary,
+    Question, QuestionSnippet, QuestionTopics, Topic, UserDetail,
 };
 pub use submission::{
     SubmissionCheckResult, SubmitPayload, SubmitResponse, TestPayload, TestSubmissionCheckResult,
@@ -30,6 +31,42 @@ pub use submission::{
 mod tests {
     use super::*;
     use serde_json;
+
+    #[test]
+    fn daily_challenge_response_deserializes() {
+        let json = r#"{
+            "activeDailyCodingChallengeQuestion": {
+                "date": "2026-10-30",
+                "question": {
+                    "questionFrontendId": "1",
+                    "title": "Two Sum",
+                    "titleSlug": "two-sum",
+                    "difficulty": "Easy",
+                    "isPaidOnly": false
+                }
+            }
+        }"#;
+        let response: DailyChallengeResponse = serde_json::from_str(json).unwrap();
+        let daily = response.active_daily_coding_challenge_question;
+        assert_eq!(daily.date, "2026-10-30");
+        assert_eq!(daily.question.question_frontend_id, "1");
+        assert_eq!(daily.question.title, "Two Sum");
+        assert_eq!(daily.question.title_slug, "two-sum");
+        assert_eq!(daily.question.difficulty, "Easy");
+        assert!(!daily.question.is_paid_only);
+    }
+
+    #[test]
+    fn daily_challenge_response_reads_paid_only() {
+        let json = r#"{"activeDailyCodingChallengeQuestion":{"date":"2026-10-31","question":{"questionFrontendId":"158","title":"Read N Characters Given read4 II","titleSlug":"read-n-characters-given-read4-ii-call-multiple-times","difficulty":"Hard","isPaidOnly":true}}}"#;
+        let response: DailyChallengeResponse = serde_json::from_str(json).unwrap();
+        assert!(
+            response
+                .active_daily_coding_challenge_question
+                .question
+                .is_paid_only
+        );
+    }
 
     // -----------------------------------------------------------------------
     // Language::to_lang_slug

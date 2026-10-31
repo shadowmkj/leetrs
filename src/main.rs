@@ -41,6 +41,14 @@ enum Commands {
         #[arg(short, long)]
         preview: bool,
     },
+    /// Pick today's LeetCode Problem of the Day
+    Daily {
+        /// Language for the code template (defaults to config.toml)
+        language: Option<Language>,
+        /// Print the problem description to stdout instead of opening the editor
+        #[arg(short, long)]
+        preview: bool,
+    },
     /// Submit a problem to leetcode
     Submit {
         /// The path to your solution file (e.g., 'two_sum.rs')
@@ -87,6 +95,11 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Auth) => commands::handle_auth(),
         Some(Commands::Tui { language }) => commands::open_tui(language).await,
         Some(Commands::Status) => commands::handle_status(),
+        Some(Commands::Daily { language, preview }) => {
+            if let Err(e) = commands::handle_daily(language, *preview).await {
+                eprintln!("❌ {}", e);
+            }
+        }
         Some(Commands::Pick {
             identifier,
             language,
@@ -162,5 +175,35 @@ mod tests {
         ])
         .unwrap_err();
         assert_eq!(err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn test_parse_daily_defaults() {
+        let cli = Cli::try_parse_from(["leetrs", "daily"]).unwrap();
+        match cli.command {
+            Some(Commands::Daily { language, preview }) => {
+                assert!(language.is_none());
+                assert!(!preview);
+            }
+            other => panic!("unexpected command: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daily_with_language_and_preview() {
+        let cli = Cli::try_parse_from(["leetrs", "daily", "rust", "-p"]).unwrap();
+        match cli.command {
+            Some(Commands::Daily { language, preview }) => {
+                assert_eq!(language, Some(Language::Rust));
+                assert!(preview);
+            }
+            other => panic!("unexpected command: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daily_rejects_flag_language() {
+        let err = Cli::try_parse_from(["leetrs", "daily", "-l", "python"]).unwrap_err();
+        assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 }

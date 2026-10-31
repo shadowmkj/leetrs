@@ -1,7 +1,7 @@
 ---
 id: test-and-submit
 title: test & submit
-sidebar_position: 5
+sidebar_position: 6
 ---
 
 # 🧪 `leetrs test` & `leetrs submit`
