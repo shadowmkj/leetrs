@@ -30,7 +30,7 @@ leetrs pick <IDENTIFIER> [LANGUAGE] [FLAGS]
 
 ## Output Files
 
-When `leetrs pick` runs, it creates two local files in the current working directory:
+When `leetrs pick` runs, it creates two local files in `solutions_dir` (default: the current working directory):
 
 1. **Description file**: `<snake_slug>.md` (e.g., `two_sum.md`)
    - Contains problem title, difficulty level, and Markdown content formatted into 80-column wrapped text.
@@ -63,4 +63,4 @@ leetrs pick 1 --preview
 
 ## Local Caching Mechanics
 
-If both `<snake_slug>.md` and `<snake_slug>.<ext>` already exist in the current working directory, `leetrs pick` reuses local files instantly without hitting LeetCode servers!
+If both `<snake_slug>.md` and `<snake_slug>.<ext>` already exist in `solutions_dir` (default: the current working directory), `leetrs pick` reuses local files instantly without hitting LeetCode servers!

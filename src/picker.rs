@@ -4,7 +4,7 @@
 //! `submit`, `test`) and the TUI. It wraps [`LeetCodeClient`] and adds local
 //! file I/O and a disk cache for the problem list.
 use crate::cache::CacheService;
-use crate::config::CONFIG;
+use crate::config::{CONFIG, solutions_dir};
 use crate::error::EngineError;
 use crate::format::format_result;
 use crate::models::{Identifier, ProblemSummary, UserDetail};
@@ -64,12 +64,16 @@ impl Picker {
         // else open the file with matching slug.
         // Early-return if files already exist: we preserve existing user code as-is
         // without rewriting comment headers.
+        let dir = solutions_dir();
         if let Identifier::String(ident) = identifier {
             let snake_slug = ident.replace("-", "_");
-            let code_filename = format!("{}.{}", snake_slug, language.code_extension());
-            let desc_filename = format!("{}.md", snake_slug);
-            if Path::new(&code_filename).exists() && Path::new(&desc_filename).exists() {
-                return Ok((code_filename, desc_filename));
+            let code_filename = dir.join(format!("{}.{}", snake_slug, language.code_extension()));
+            let desc_filename = dir.join(format!("{}.md", snake_slug));
+            if code_filename.exists() && desc_filename.exists() {
+                return Ok((
+                    code_filename.display().to_string(),
+                    desc_filename.display().to_string(),
+                ));
             }
         }
 
@@ -106,8 +110,20 @@ impl Picker {
 
         //  determine filenames (converting kebab-case to snake_case)
         let snake_slug = question.title_slug.replace("-", "_");
-        let code_filename = format!("{}.{}", snake_slug, language.code_extension());
-        let desc_filename = format!("{}.md", snake_slug);
+        let code_filename = dir
+            .join(format!("{}.{}", snake_slug, language.code_extension()))
+            .display()
+            .to_string();
+        let desc_filename = dir.join(format!("{}.md", snake_slug)).display().to_string();
+
+        if let Err(e) = fs::create_dir_all(&dir) {
+            eprintln!(
+                "❌ failed to create solutions directory {}: {}",
+                dir.display(),
+                e
+            );
+            return Err(EngineError::System);
+        }
 
         // Write metadata comment at the top of the generated code file.
         // We use `question_frontend_id` (the public problem number on LeetCode) so the file
@@ -120,15 +136,28 @@ impl Picker {
             language.to_lang_slug()
         );
 
-        if let Err(e) = fs::write(&code_filename, format!("{}\n\n{}", meta, snippet.code)) {
-            eprintln!("❌ failed to write code file: {}", e);
-            return Err(EngineError::System);
+        // Never overwrite an existing file: with a shared solutions_dir, picking
+        // a problem by number would otherwise replace saved work.
+        let mut generated = false;
+        if Path::new(&code_filename).exists() {
+            println!("📄 keeping existing {}", code_filename);
+        } else {
+            if let Err(e) = fs::write(&code_filename, format!("{}\n\n{}", meta, snippet.code)) {
+                eprintln!("❌ failed to write code file: {}", e);
+                return Err(EngineError::System);
+            }
+            generated = true;
         }
-        if let Err(e) = fs::write(&desc_filename, md_content) {
-            eprintln!("❌ failed to write description file: {}", e);
-            return Err(EngineError::System);
+        if !Path::new(&desc_filename).exists() {
+            if let Err(e) = fs::write(&desc_filename, md_content) {
+                eprintln!("❌ failed to write description file: {}", e);
+                return Err(EngineError::System);
+            }
+            generated = true;
         }
-        println!("✅ files generated successfully.");
+        if generated {
+            println!("✅ files generated successfully.");
+        }
 
         Ok((code_filename, desc_filename))
     }

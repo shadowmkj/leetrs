@@ -32,6 +32,7 @@ If `config.toml` does not exist when `leetrs` is invoked, `leetrs` creates the d
 | `editor` | `string` | `"nvim"` | Command executed when picking a problem. Supports `"nvim"`, `"vim"`, `"code"`, or any custom terminal editor binary. |
 | `language` | `string` | `"python3"` | Default language slug used when fetching problem code templates (`"rust"`, `"python3"`, `"pythondata"`, `"mysql"`, `"postgresql"`). |
 | `show_description` | `boolean` | `true` | When `true`, opens the problem description alongside the code template in split view. |
+| `solutions_dir` | `string` | current directory | Where `pick` writes problem files. Absolute paths and a leading `~` work; relative paths resolve against the current directory, and environment variables are not expanded. `test` and `submit` look here for a file that is not in the current directory. |
 
 ---
 

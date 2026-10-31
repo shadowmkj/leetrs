@@ -3,7 +3,9 @@
 //! Extracts the shared logic between [`Picker::test_submit`] and
 //! [`Picker::submit`] into a single `submit_or_test` method with a structured
 //! result type that callers can pattern-match on.
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use crate::config::solutions_dir;
 
 use crate::{
     client::LeetCodeClient,
@@ -145,9 +147,21 @@ impl SubmissionService {
     /// filename/extension, fetches the full question metadata, and returns the
     /// tuple `(code, slug, language, question)` ready for submission.
     async fn read_and_resolve(&self, file: &str) -> Result<(String, String, Language, Question)> {
-        let code = std::fs::read_to_string(file).map_err(EngineError::Io)?;
+        let dir = solutions_dir();
+        let path = resolve_solution_file(file, &dir);
+        let code = std::fs::read_to_string(&path).map_err(|e| {
+            // Only name solutions_dir when it was actually searched.
+            let also = if dir.as_os_str().is_empty() || Path::new(file).is_absolute() {
+                String::new()
+            } else {
+                format!(" (also looked in {})", dir.display())
+            };
+            EngineError::Io(std::io::Error::new(
+                e.kind(),
+                format!("could not read '{}'{}: {}", file, also, e),
+            ))
+        })?;
 
-        let path = Path::new(file);
         let file_stem = path
             .file_stem()
             .unwrap_or_default()
@@ -234,6 +248,22 @@ impl SubmissionService {
 
             Ok(SubmissionResult::from_submit_check(r))
         }
+    }
+}
+
+/// `file` as given if it exists, otherwise the same name under the configured
+/// `solutions_dir` (which `pick` writes to). A file found in neither place
+/// resolves to `file` as typed.
+fn resolve_solution_file(file: &str, solutions_dir: &Path) -> PathBuf {
+    let path = PathBuf::from(file);
+    if path.exists() {
+        return path;
+    }
+    let in_solutions_dir = solutions_dir.join(&path);
+    if in_solutions_dir.exists() {
+        in_solutions_dir
+    } else {
+        path
     }
 }
 
@@ -427,6 +457,36 @@ mod tests {
             result.std_output_list,
             Some(vec!["preferred list\n".into()])
         );
+    }
+
+    #[test]
+    fn resolve_solution_file_falls_back_to_solutions_dir() {
+        let dir = std::env::temp_dir().join(format!("leetrs-solutions-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = "leetrs_resolve_fallback_two_sum.rs";
+        std::fs::write(dir.join(name), "").unwrap();
+
+        // Not in the current directory: found under solutions_dir.
+        assert_eq!(resolve_solution_file(name, &dir), dir.join(name));
+        // Missing everywhere: the path as typed, so the error names it.
+        assert_eq!(
+            resolve_solution_file("leetrs_missing_xyz.rs", &dir),
+            PathBuf::from("leetrs_missing_xyz.rs")
+        );
+        // A relative name in the current directory wins over solutions_dir.
+        assert_eq!(
+            resolve_solution_file("Cargo.toml", &dir),
+            PathBuf::from("Cargo.toml")
+        );
+        // An existing path wins over solutions_dir.
+        let here = dir.join(name);
+        let here = here.to_str().unwrap();
+        assert_eq!(
+            resolve_solution_file(here, Path::new("/nonexistent")),
+            PathBuf::from(here)
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[tokio::test]
