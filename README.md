@@ -238,7 +238,7 @@ leetrs submit two_sum.rs
 | `test` | `<file>` | Tests local solution file against sample test cases without official submission. |
 | `submit` | `<file>` | Submits solution file to LeetCode for full judging and statistics. |
 | `status` | — | Displays active authentication state and token information. |
-| `completion` | `<shell>` | Generates shell autocomplete scripts (`bash`, `zsh`, `fish`). |
+| `completion` | `<shell>` | Generates shell autocomplete scripts (`bash`, `zsh`, `fish`, `elvish`, `powershell`). |
 
 ---
 
