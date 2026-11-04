@@ -6,7 +6,11 @@
 use crate::error::{EngineError, Result};
 use directories::ProjectDirs;
 use serde::{Serialize, de::DeserializeOwned};
-use std::{fs, path::PathBuf};
+use std::{
+    fs::{self, File},
+    io::{BufReader, BufWriter, Write},
+    path::PathBuf,
+};
 
 /// Provides typed read/write access to the application's OS data directory.
 ///
@@ -49,9 +53,10 @@ impl CacheService {
     /// Returns `Ok(None)` if the file does not exist, `Err` on I/O or parse failure.
     pub fn read<T: DeserializeOwned>(&self, name: &str) -> Result<Option<T>> {
         let path = self.path(name);
-        match fs::read_to_string(&path) {
-            Ok(contents) => {
-                let value: T = serde_json::from_str(&contents).map_err(EngineError::from)?;
+        match File::open(&path) {
+            Ok(file) => {
+                let value: T =
+                    serde_json::from_reader(BufReader::new(file)).map_err(stream_error)?;
                 Ok(Some(value))
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -60,10 +65,13 @@ impl CacheService {
     }
 
     /// Serialises a value and writes it to a named cache file.
+    ///
+    /// The file is truncated first, so a failed write can leave it empty or partial.
     pub fn write<T: Serialize>(&self, name: &str, value: &T) -> Result<()> {
         let path = self.path(name);
-        let contents = serde_json::to_string(value).map_err(EngineError::from)?;
-        fs::write(&path, &contents).map_err(EngineError::Io)
+        let mut writer = BufWriter::new(File::create(&path).map_err(EngineError::Io)?);
+        serde_json::to_writer(&mut writer, value).map_err(stream_error)?;
+        writer.flush().map_err(EngineError::Io)
     }
 
     /// Reads raw string content from a named cache file.
@@ -79,8 +87,59 @@ impl CacheService {
     }
 }
 
+/// Maps a streaming serde_json error, keeping I/O failures as [`EngineError::Io`].
+fn stream_error(e: serde_json::Error) -> EngineError {
+    if e.is_io() {
+        EngineError::Io(e.into())
+    } else {
+        EngineError::Parse(e)
+    }
+}
+
 impl Default for CacheService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_and_write_round_trip_through_the_file() {
+        let data_dir = std::env::temp_dir().join(format!("leetrs-cache-{}", std::process::id()));
+        fs::create_dir_all(&data_dir).unwrap();
+        let cache = CacheService {
+            data_dir: data_dir.clone(),
+        };
+
+        assert!(cache.read::<Vec<u32>>("missing.json").unwrap().is_none());
+
+        cache.write("values.json", &vec![1, 2, 3]).unwrap();
+        assert_eq!(
+            cache.read::<Vec<u32>>("values.json").unwrap(),
+            Some(vec![1, 2, 3])
+        );
+
+        fs::write(data_dir.join("corrupt.json"), "not json").unwrap();
+        assert!(cache.read::<Vec<u32>>("corrupt.json").is_err());
+
+        fs::remove_dir_all(data_dir).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn write_reports_io_failures_as_io_errors() {
+        let cache = CacheService {
+            data_dir: "/dev".into(),
+        };
+
+        assert!(matches!(cache.write("full", &1), Err(EngineError::Io(_))));
+        // Larger than the buffer, so serde_json reports the failure itself.
+        assert!(matches!(
+            cache.write("full", &vec![0; 100_000]),
+            Err(EngineError::Io(_))
+        ));
     }
 }
