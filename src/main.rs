@@ -15,7 +15,7 @@ use leetrs::{
 #[derive(Parser, Debug)]
 #[command(name = "leetrs")]
 #[command(about = "A Neovim-integrated LeetCode TUI", long_about = None)]
-#[command(version)]
+#[command(version = option_env!("LEETRS_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")))]
 struct Cli {
     /// Enable verbose diagnostic logging
     #[arg(short, long, global = true)]
@@ -144,6 +144,22 @@ mod tests {
     fn test_cli_definition_is_valid() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn test_version_format() {
+        use clap::CommandFactory;
+        let version = Cli::command().render_version();
+        let version = version.trim();
+        let base = concat!("leetrs ", env!("CARGO_PKG_VERSION"));
+        let unreleased_prefix = format!("{base}+");
+
+        // The version must either match "leetrs <PKG_VERSION>" (when tagged/released)
+        // or start with "leetrs <PKG_VERSION>+<commit>" (when untagged/unreleased).
+        assert!(
+            version == base || version.starts_with(&unreleased_prefix),
+            "expected version '{version}' to be either '{base}' or start with '{unreleased_prefix}'"
+        );
     }
 
     #[test]
