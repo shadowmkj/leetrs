@@ -19,6 +19,9 @@ use serde_json::json;
 /// duplicating the polling loop for test submissions and full submissions.
 trait Pollable {
     fn is_complete(&self) -> bool;
+    fn is_terminal_failure(&self) -> Option<String> {
+        None
+    }
 }
 
 impl Pollable for crate::models::TestSubmissionCheckResult {
@@ -26,11 +29,30 @@ impl Pollable for crate::models::TestSubmissionCheckResult {
         // LeetCode's state moves from "PENDING" or "STARTED" to "SUCCESS" when done
         self.state == "SUCCESS"
     }
+
+    fn is_terminal_failure(&self) -> Option<String> {
+        if self.state == "FAILURE" || self.state == "ERROR" {
+            Some(format!("Test judging failed with state: {}", self.state))
+        } else {
+            None
+        }
+    }
 }
 
 impl Pollable for crate::models::SubmissionCheckResult {
     fn is_complete(&self) -> bool {
         self.state == "SUCCESS"
+    }
+
+    fn is_terminal_failure(&self) -> Option<String> {
+        if self.state == "FAILURE" || self.state == "ERROR" {
+            Some(format!(
+                "Submission judging failed with state: {}",
+                self.state
+            ))
+        } else {
+            None
+        }
     }
 }
 
@@ -371,9 +393,20 @@ impl LeetCodeClient {
     /// Generic polling loop shared by [`check_test_submission`] and [`check_submission`].
     ///
     /// Keeps sending GET requests to `url` every 1.5 s until the response
-    /// deserialises to a type that reports [`Pollable::is_complete`] as `true`.
+    /// deserialises to a type that reports [`Pollable::is_complete`] as `true`,
+    /// or until the 40-attempt timeout (~60s) is reached.
     async fn poll_check<T: serde::de::DeserializeOwned + Pollable>(&self, url: &str) -> Result<T> {
-        loop {
+        self.poll_check_internal(url, 40, 1500).await
+    }
+
+    /// Internal polling loop with configurable attempt count and sleep interval.
+    async fn poll_check_internal<T: serde::de::DeserializeOwned + Pollable>(
+        &self,
+        url: &str,
+        max_attempts: usize,
+        interval_ms: u64,
+    ) -> Result<T> {
+        for attempt in 1..=max_attempts {
             let response = self.http_client.get(url).send().await?;
 
             if !response.status().is_success() {
@@ -389,9 +422,19 @@ impl LeetCodeClient {
                 return Ok(result);
             }
 
-            // Sleep for 1.5 seconds before polling again to avoid hitting rate limits
-            tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+            if let Some(err_msg) = result.is_terminal_failure() {
+                return Err(EngineError::Other(err_msg));
+            }
+
+            if attempt < max_attempts {
+                tokio::time::sleep(std::time::Duration::from_millis(interval_ms)).await;
+            }
         }
+
+        Err(EngineError::Other(format!(
+            "Timed out after {} attempts waiting for judge results",
+            max_attempts
+        )))
     }
 
     /// Fetches the current user's profile via the `userStatus` GraphQL query.
@@ -686,5 +729,125 @@ impl LeetCodeApi for LeetCodeClient {
         &self,
     ) -> impl std::future::Future<Output = Result<crate::models::ActiveDailyQuestion>> + Send {
         LeetCodeClient::get_daily_challenge(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn test_poll_check_times_out_when_pending() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            loop {
+                if let Ok((mut socket, _)) = listener.accept().await {
+                    let mut buf = [0u8; 1024];
+                    let _ = socket.read(&mut buf).await;
+                    let body = r#"{"state":"PENDING"}"#;
+                    let resp = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                }
+            }
+        });
+
+        let creds = LeetCodeCredentials {
+            session_cookie: "test".to_string(),
+            csrf_token: "test".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).unwrap();
+        let url = format!("http://{}/check", addr);
+
+        let res: Result<crate::models::SubmissionCheckResult> =
+            client.poll_check_internal(&url, 3, 10).await;
+
+        assert!(res.is_err());
+        let err = res.unwrap_err().to_string();
+        assert!(err.contains("Timed out after 3 attempts"));
+    }
+
+    #[tokio::test]
+    async fn test_poll_check_fails_fast_on_terminal_failure() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                let _ = socket.read(&mut buf).await;
+                let body = r#"{"state":"FAILURE"}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            }
+        });
+
+        let creds = LeetCodeCredentials {
+            session_cookie: "test".to_string(),
+            csrf_token: "test".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).unwrap();
+        let url = format!("http://{}/check", addr);
+
+        let res: Result<crate::models::SubmissionCheckResult> =
+            client.poll_check_internal(&url, 5, 10).await;
+
+        assert!(res.is_err());
+        let err = res.unwrap_err().to_string();
+        assert!(err.contains("Submission judging failed with state: FAILURE"));
+    }
+
+    #[tokio::test]
+    async fn test_poll_check_succeeds_when_eventually_success() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let mut count = 0;
+            while let Ok((mut socket, _)) = listener.accept().await {
+                count += 1;
+                let mut buf = [0u8; 1024];
+                let _ = socket.read(&mut buf).await;
+                let body = if count == 1 {
+                    r#"{"state":"STARTED"}"#
+                } else {
+                    r#"{"state":"SUCCESS","status_msg":"Accepted"}"#
+                };
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+                if count >= 2 {
+                    break;
+                }
+            }
+        });
+
+        let creds = LeetCodeCredentials {
+            session_cookie: "test".to_string(),
+            csrf_token: "test".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).unwrap();
+        let url = format!("http://{}/check", addr);
+
+        let res: Result<crate::models::SubmissionCheckResult> =
+            client.poll_check_internal(&url, 5, 10).await;
+
+        assert!(res.is_ok());
+        let result = res.unwrap();
+        assert_eq!(result.state, "SUCCESS");
+        assert_eq!(result.status_msg.as_deref(), Some("Accepted"));
     }
 }
