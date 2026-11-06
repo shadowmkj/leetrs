@@ -14,7 +14,7 @@ sidebar_position: 3
 
 | Resource | Path Location | Description |
 |---|---|---|
-| **Config** | `~/.config/leetrs/config.toml` | User preferences (`editor`, `language`, `show_description`) |
+| **Config** | `~/.config/leetrs/config.toml` | User preferences (`editor`, `language`, `show_description`, `solutions_dir`) |
 | **Credentials** | `~/.config/leetrs/credentials.json` | Active session tokens (`csrftoken`, `session_cookie`) |
 | **Problem Cache** | `~/.local/share/leetrs/data.json` | Cached problem summaries, difficulties, acceptance, and topic tags |
 

@@ -3,7 +3,9 @@
 //! Extracts the shared logic between [`Picker::test_submit`] and
 //! [`Picker::submit`] into a single `submit_or_test` method with a structured
 //! result type that callers can pattern-match on.
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use crate::config::solutions_dir;
 
 use crate::{
     client::LeetCodeClient,
@@ -145,9 +147,24 @@ impl SubmissionService {
     /// filename/extension, fetches the full question metadata, and returns the
     /// tuple `(code, slug, language, question)` ready for submission.
     async fn read_and_resolve(&self, file: &str) -> Result<(String, String, Language, Question)> {
-        let code = std::fs::read_to_string(file).map_err(EngineError::Io)?;
+        let dir = solutions_dir();
+        let path = resolve_solution_file(file, &dir);
+        let code = std::fs::read_to_string(&path).map_err(|e| {
+            let msg = if path.exists() {
+                format!("could not read '{}': {}", path.display(), e)
+            } else if !dir.as_os_str().is_empty() && !Path::new(file).is_absolute() {
+                format!(
+                    "could not read '{}' (also looked in {}): {}",
+                    file,
+                    dir.display(),
+                    e
+                )
+            } else {
+                format!("could not read '{}': {}", file, e)
+            };
+            EngineError::Io(std::io::Error::new(e.kind(), msg))
+        })?;
 
-        let path = Path::new(file);
         let file_stem = path
             .file_stem()
             .unwrap_or_default()
@@ -234,6 +251,22 @@ impl SubmissionService {
 
             Ok(SubmissionResult::from_submit_check(r))
         }
+    }
+}
+
+/// `file` as given if it exists, otherwise the same name under the configured
+/// `solutions_dir` (which `pick` writes to). A file found in neither place
+/// resolves to `file` as typed.
+fn resolve_solution_file(file: &str, solutions_dir: &Path) -> PathBuf {
+    let path = PathBuf::from(file);
+    if path.exists() {
+        return path;
+    }
+    let in_solutions_dir = solutions_dir.join(&path);
+    if in_solutions_dir.exists() {
+        in_solutions_dir
+    } else {
+        path
     }
 }
 
@@ -429,6 +462,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn resolve_solution_file_falls_back_to_solutions_dir() {
+        let dir = std::env::temp_dir().join(format!("leetrs-solutions-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let name = "leetrs_resolve_fallback_two_sum.rs";
+        std::fs::write(dir.join(name), "").unwrap();
+
+        // Not in the current directory: found under solutions_dir.
+        assert_eq!(resolve_solution_file(name, &dir), dir.join(name));
+        // Missing everywhere: the path as typed, so the error names it.
+        assert_eq!(
+            resolve_solution_file("leetrs_missing_xyz.rs", &dir),
+            PathBuf::from("leetrs_missing_xyz.rs")
+        );
+        // A relative name in the current directory wins over solutions_dir.
+        assert_eq!(
+            resolve_solution_file("Cargo.toml", &dir),
+            PathBuf::from("Cargo.toml")
+        );
+        // An existing path wins over solutions_dir.
+        let here = dir.join(name);
+        let here = here.to_str().unwrap();
+        assert_eq!(
+            resolve_solution_file(here, Path::new("/nonexistent")),
+            PathBuf::from(here)
+        );
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[tokio::test]
     async fn test_submission_service_file_not_found() {
         let creds = LeetCodeCredentials {
@@ -441,6 +504,34 @@ mod tests {
         let err = service
             .submit_or_test("non_existent_problem_file_xyz.rs", true, None)
             .await;
-        assert!(matches!(err, Err(EngineError::Io(_))));
+        match err {
+            Err(EngineError::Io(e)) => {
+                let msg = e.to_string();
+                assert!(msg.contains("could not read 'non_existent_problem_file_xyz.rs'"));
+                assert!(!msg.contains("also looked in"));
+            }
+            _ => panic!("expected EngineError::Io"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submission_service_existing_unreadable_file_names_path() {
+        let creds = LeetCodeCredentials {
+            session_cookie: "dummy_session".to_string(),
+            csrf_token: "dummy_csrf".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).expect("client creation failed");
+        let service = SubmissionService::new(client);
+
+        // "src" is a directory so read_to_string fails, but path.exists() is true.
+        let err = service.submit_or_test("src", true, None).await;
+        match err {
+            Err(EngineError::Io(e)) => {
+                let msg = e.to_string();
+                assert!(msg.contains("could not read 'src'"));
+                assert!(!msg.contains("also looked in"));
+            }
+            _ => panic!("expected EngineError::Io"),
+        }
     }
 }
