@@ -9,7 +9,7 @@ use dialoguer::theme::ColorfulTheme;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// The two cookies required to authenticate all requests to LeetCode's API.
 ///
@@ -58,6 +58,38 @@ impl LeetCodeCredentials {
         println!("writing to {:?}", config_path);
         fs::write(config_path, json)?;
         Ok(())
+    }
+
+    /// Removes `credentials.json` from disk if it exists.
+    ///
+    /// Returns `Ok(Some(path))` if deleted, or `Ok(None)` if no credentials file was found.
+    pub fn delete() -> Result<Option<PathBuf>, std::io::Error> {
+        let config_path = Self::get_config_path();
+        let data_path = ProjectDirs::from("com", "shadowmkj", "leetrs")
+            .map(|dirs| dirs.data_dir().join("credentials.json"));
+        Self::delete_paths(config_path.as_deref(), data_path.as_deref())
+    }
+
+    fn delete_paths(
+        config_path: Option<&Path>,
+        data_path: Option<&Path>,
+    ) -> Result<Option<PathBuf>, std::io::Error> {
+        let mut removed = None;
+        if let Some(path) = config_path
+            && path.exists()
+        {
+            fs::remove_file(path)?;
+            removed = Some(path.to_path_buf());
+        }
+        if let Some(path) = data_path
+            && path.exists()
+        {
+            let _ = fs::remove_file(path);
+            if removed.is_none() {
+                removed = Some(path.to_path_buf());
+            }
+        }
+        Ok(removed)
     }
 }
 
@@ -200,5 +232,25 @@ mod tests {
                 assert_ne!(msg, "Unsupported browser");
             }
         }
+    }
+
+    #[test]
+    fn delete_paths_removes_existing_file() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("leetrs-auth-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let dummy_creds = temp_dir.join("credentials.json");
+        fs::write(&dummy_creds, "{}").unwrap();
+        assert!(dummy_creds.exists());
+
+        let res = LeetCodeCredentials::delete_paths(Some(&dummy_creds), None).unwrap();
+        assert_eq!(res, Some(dummy_creds.clone()));
+        assert!(!dummy_creds.exists());
+
+        // Calling again when file is gone returns None
+        let res2 = LeetCodeCredentials::delete_paths(Some(&dummy_creds), None).unwrap();
+        assert_eq!(res2, None);
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

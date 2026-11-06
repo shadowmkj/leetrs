@@ -83,6 +83,9 @@ https://github.com/user-attachments/assets/86783e7e-afc6-449a-828b-c29e34fa9dbb
   - Run code against sample test cases locally without polluting your official submission history.
   - Submit directly to LeetCode's judging servers and view real-time judge results, runtime/memory percentiles, and compiler error logs.
 
+- 🧹 **Cache & Credential Reset (`leetrs clean` / `leetrs reset`)**
+  - Reset and invalidate corrupted cache files (`data.json`, `user.json`) and stored credentials with a single command.
+
 ---
 
 ## 🔧 Prerequisites
@@ -313,12 +316,12 @@ When navigating the interactive TUI (`leetrs tui`), the following keybindings ar
 </details>
 
 <details>
-<summary><b>How do I refresh cached problem lists or user profile data?</b></summary>
+<summary><b>How do I refresh cached problem lists or reset corrupted data?</b></summary>
 
-- `leetrs` caches problem metadata locally in your user data directory (`~/.local/share/leetrs/` or OS equivalent).
-- If problem cache becomes corrupted, delete the cache file to trigger a fresh sync on next run:
+- `leetrs` caches problem metadata (`data.json`) and user profile info (`user.json`) locally.
+- Run `leetrs clean` (or `leetrs reset`) to safely purge and invalidate all local cache files and stored credentials:
   ```bash
-  rm -rf ~/.local/share/leetrs/data.json
+  leetrs clean
   ```
 </details>
 

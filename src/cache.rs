@@ -85,6 +85,23 @@ impl CacheService {
     pub fn write_raw(&self, name: &str, content: &str) -> Result<()> {
         fs::write(self.path(name), content).map_err(EngineError::Io)
     }
+
+    /// Removes cache files (`data.json` and `user.json`) from disk.
+    ///
+    /// Returns the list of paths that were deleted. Missing files are safely ignored.
+    pub fn clean(&self) -> Result<Vec<PathBuf>> {
+        let targets = [self.problems_path(), self.user_path()];
+        let mut removed = Vec::new();
+
+        for path in targets {
+            if path.exists() {
+                fs::remove_file(&path).map_err(EngineError::Io)?;
+                removed.push(path);
+            }
+        }
+
+        Ok(removed)
+    }
 }
 
 /// Maps a streaming serde_json error, keeping I/O failures as [`EngineError::Io`].
@@ -124,6 +141,21 @@ mod tests {
 
         fs::write(data_dir.join("corrupt.json"), "not json").unwrap();
         assert!(cache.read::<Vec<u32>>("corrupt.json").is_err());
+
+        // Test clean() removes problems_path and user_path
+        fs::write(cache.problems_path(), "[]").unwrap();
+        fs::write(cache.user_path(), "{}").unwrap();
+        assert!(cache.problems_path().exists());
+        assert!(cache.user_path().exists());
+
+        let removed = cache.clean().unwrap();
+        assert_eq!(removed.len(), 2);
+        assert!(!cache.problems_path().exists());
+        assert!(!cache.user_path().exists());
+
+        // Second clean() call on already cleaned cache returns empty list without error
+        let removed_again = cache.clean().unwrap();
+        assert!(removed_again.is_empty());
 
         fs::remove_dir_all(data_dir).unwrap();
     }

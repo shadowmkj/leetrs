@@ -74,6 +74,9 @@ enum Commands {
     },
     /// Setup autocomplete for shell
     Completion { shell: clap_complete::Shell },
+    /// Clean and invalidate local cache, problem data, and stored credentials
+    #[command(alias = "reset")]
+    Clean,
 }
 
 /// Parses a CLI identifier argument as either a numeric problem ID or a slug string.
@@ -139,6 +142,11 @@ async fn main() -> anyhow::Result<()> {
         }
         Some(Commands::Completion { shell }) => {
             if let Err(e) = commands::handle_completion::<Cli>(shell) {
+                eprintln!("❌ {}", e);
+            }
+        }
+        Some(Commands::Clean) => {
+            if let Err(e) = commands::handle_clean() {
                 eprintln!("❌ {}", e);
             }
         }
@@ -302,5 +310,14 @@ mod tests {
             }
             other => panic!("unexpected command: {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_parse_clean_and_reset_alias() {
+        let cli_clean = Cli::try_parse_from(["leetrs", "clean"]).unwrap();
+        assert!(matches!(cli_clean.command, Some(Commands::Clean)));
+
+        let cli_reset = Cli::try_parse_from(["leetrs", "reset"]).unwrap();
+        assert!(matches!(cli_reset.command, Some(Commands::Clean)));
     }
 }

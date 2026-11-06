@@ -24,7 +24,10 @@ sidebar_position: 3
 
 1. **First Run / Cache Miss**: When `leetrs tui` or `list_problems()` is called for the first time, `CacheService` queries LeetCode GraphQL API to fetch the full problem list and writes it to `data.json`.
 2. **Cache Hit**: On subsequent launches, `data.json` is deserialized instantly into memory, reducing boot time to under 10 milliseconds.
-3. **Cache Invalidation**: To force a fresh problem synchronization:
+3. **Cache Invalidation**: To reset corrupted state or force a fresh problem synchronization, run the [`clean`](../cli-reference/clean.md) command:
    ```bash
-   rm -rf ~/.local/share/leetrs/data.json
+   leetrs clean
+   # or
+   leetrs reset
    ```
+   This safely invalidates and removes `data.json`, `user.json`, and stored credentials without needing manual path lookups.

@@ -29,6 +29,7 @@ const sidebars: SidebarsConfig = {
         'cli-reference/daily',
         'cli-reference/test-and-submit',
         'cli-reference/completion',
+        'cli-reference/clean',
       ],
     },
     {

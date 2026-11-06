@@ -15,6 +15,7 @@ use dialoguer::{Select, theme::ColorfulTheme};
 
 use crate::{
     auth::{LeetCodeCredentials, auto_extract_flow, manual_auth_flow},
+    cache::CacheService,
     client::LeetCodeClient,
     config::CONFIG,
     models::{Identifier, Language, ProblemSummary},
@@ -100,6 +101,67 @@ pub fn handle_status() {
             eprintln!("Run `leetrs auth` to set up your account.");
         }
     }
+}
+
+/// Resets local state by removing cached problem data, user info, and credentials.
+pub fn handle_clean() -> std::result::Result<(), String> {
+    let cache = CacheService::new();
+    handle_clean_internal(&cache, LeetCodeCredentials::delete)
+}
+
+pub(crate) fn handle_clean_internal<F>(
+    cache: &CacheService,
+    delete_creds: F,
+) -> std::result::Result<(), String>
+where
+    F: FnOnce() -> Result<Option<std::path::PathBuf>, std::io::Error>,
+{
+    println!("🧹 Cleaning local cache and credentials...\n");
+    let mut removed_count = 0;
+
+    match cache.clean() {
+        Ok(removed_files) => {
+            for file in removed_files {
+                let name = file
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("cache file");
+                println!("  ✓ Removed {} (problem cache)", name);
+                removed_count += 1;
+            }
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to clean cache files: {}", e);
+            return Err(format!("Failed to clean cache: {}", e));
+        }
+    }
+
+    match delete_creds() {
+        Ok(Some(path)) => {
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("credentials.json");
+            println!("  ✓ Removed {} (stored credentials)", name);
+            removed_count += 1;
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("❌ Failed to remove credentials: {}", e);
+            return Err(format!("Failed to remove credentials: {}", e));
+        }
+    }
+
+    if removed_count > 0 {
+        println!(
+            "\n✨ Successfully cleared {} file(s). Local state has been reset.",
+            removed_count
+        );
+    } else {
+        println!("✨ Everything is already clean. No cache or credential files found.");
+    }
+
+    Ok(())
 }
 
 /// Resolves and writes the problem files, then opens Neovim with the description
@@ -509,5 +571,37 @@ mod tests {
             problem_url("two-sum"),
             "https://leetcode.com/problems/two-sum"
         );
+    }
+
+    #[test]
+    fn test_handle_clean_internal_with_files_and_empty() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("leetrs-clean-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+
+        // CacheService has a private data_dir, but we can test via temp dir
+        // Let's create dummy files to test deletion reporting
+        let dummy_creds_path = temp_dir.join("credentials.json");
+        fs::write(&dummy_creds_path, "{}").unwrap();
+
+        // 1. Test when delete_creds returns Some(path)
+        let res =
+            handle_clean_internal(&CacheService::new(), || Ok(Some(dummy_creds_path.clone())));
+        assert!(res.is_ok());
+
+        // 2. Test when delete_creds returns None
+        let res2 = handle_clean_internal(&CacheService::new(), || Ok(None));
+        assert!(res2.is_ok());
+
+        // 3. Test when delete_creds returns Err
+        let res3 = handle_clean_internal(&CacheService::new(), || {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "denied",
+            ))
+        });
+        assert!(res3.is_err());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

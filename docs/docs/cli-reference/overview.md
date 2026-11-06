@@ -22,6 +22,7 @@ sidebar_position: 1
 | [`test`](./test-and-submit.md) | `<file>` `[-c, --cases <input> \| --cases-file <path>]` | Test local solution against sample test cases without official submission |
 | [`submit`](./test-and-submit.md) | `<file>` | Submit local solution to LeetCode for full judging and statistics |
 | [`completion`](./completion.md) | `<shell>` | Generate shell autocomplete scripts (`bash`, `zsh`, `fish`, `elvish`, `powershell`) |
+| [`clean`](./clean.md) | — | Invalidate and purge local cache (`data.json`, `user.json`) and stored credentials (`credentials.json`) |
 
 ---
 
