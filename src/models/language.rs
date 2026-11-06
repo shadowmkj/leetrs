@@ -84,7 +84,7 @@ impl Language {
 }
 
 /// A problem identifier supplied on the command line — either a numeric ID or a slug.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Identifier {
     Number(u64),
     String(String),

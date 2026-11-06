@@ -31,6 +31,7 @@ leetrs daily [OPTIONS] [LANGUAGE]
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `-p`, `--preview` | `flag` | No | Print the problem description Markdown to `stdout` without opening an editor. |
+| `-b`, `--browser` | `flag` | No | Open the problem in your default web browser alongside the editor. |
 
 ---
 
@@ -39,9 +40,11 @@ leetrs daily [OPTIONS] [LANGUAGE]
 - The active challenge comes from LeetCode's `questionOfToday` GraphQL query. Its date, number, title and difficulty are printed to `stderr` before the problem is picked, so `leetrs daily --preview > problem.md` keeps that line out of the file.
 - Files are written and reused exactly as with `pick`.
 - If today's problem is for LeetCode Premium subscribers and your account is not premium, `daily` stops with a message instead of failing on the missing content. If premium status can't be confirmed, it warns and tries anyway.
+- When `-b` or `--browser` is passed, the problem URL (`https://leetcode.com/problems/<slug>`) is opened in your default browser.
 
 ```bash
 leetrs daily
 leetrs daily rust
+leetrs daily -b
 leetrs daily --preview
 ```

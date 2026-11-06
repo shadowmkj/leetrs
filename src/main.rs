@@ -38,8 +38,12 @@ enum Commands {
         #[arg(value_parser = parse_identifier)]
         identifier: Identifier,
         language: Option<Language>,
+        /// Print the problem description to stdout instead of opening the editor
         #[arg(short, long)]
         preview: bool,
+        /// Open the problem in default web browser
+        #[arg(short, long)]
+        browser: bool,
     },
     /// Pick today's LeetCode Problem of the Day
     Daily {
@@ -48,6 +52,9 @@ enum Commands {
         /// Print the problem description to stdout instead of opening the editor
         #[arg(short, long)]
         preview: bool,
+        /// Open the problem in default web browser
+        #[arg(short, long)]
+        browser: bool,
     },
     /// Submit a problem to leetcode
     Submit {
@@ -95,8 +102,12 @@ async fn main() -> anyhow::Result<()> {
         Some(Commands::Auth) => commands::handle_auth(),
         Some(Commands::Tui { language }) => commands::open_tui(language).await,
         Some(Commands::Status) => commands::handle_status(),
-        Some(Commands::Daily { language, preview }) => {
-            if let Err(e) = commands::handle_daily(language, *preview).await {
+        Some(Commands::Daily {
+            language,
+            preview,
+            browser,
+        }) => {
+            if let Err(e) = commands::handle_daily(language, *preview, *browser).await {
                 eprintln!("❌ {}", e);
             }
         }
@@ -104,8 +115,9 @@ async fn main() -> anyhow::Result<()> {
             identifier,
             language,
             preview,
+            browser,
         }) => {
-            if let Err(e) = commands::handle_pick(identifier, language, *preview).await {
+            if let Err(e) = commands::handle_pick(identifier, language, *preview, *browser).await {
                 eprintln!("❌ {}", e);
             }
         }
@@ -199,9 +211,14 @@ mod tests {
     fn test_parse_daily_defaults() {
         let cli = Cli::try_parse_from(["leetrs", "daily"]).unwrap();
         match cli.command {
-            Some(Commands::Daily { language, preview }) => {
+            Some(Commands::Daily {
+                language,
+                preview,
+                browser,
+            }) => {
                 assert!(language.is_none());
                 assert!(!preview);
+                assert!(!browser);
             }
             other => panic!("unexpected command: {:?}", other),
         }
@@ -211,9 +228,14 @@ mod tests {
     fn test_parse_daily_with_language_and_preview() {
         let cli = Cli::try_parse_from(["leetrs", "daily", "rust", "-p"]).unwrap();
         match cli.command {
-            Some(Commands::Daily { language, preview }) => {
+            Some(Commands::Daily {
+                language,
+                preview,
+                browser,
+            }) => {
                 assert_eq!(language, Some(Language::Rust));
                 assert!(preview);
+                assert!(!browser);
             }
             other => panic!("unexpected command: {:?}", other),
         }
@@ -223,5 +245,62 @@ mod tests {
     fn test_parse_daily_rejects_flag_language() {
         let err = Cli::try_parse_from(["leetrs", "daily", "-l", "python"]).unwrap_err();
         assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
+    }
+
+    #[test]
+    fn test_parse_daily_with_browser() {
+        let cli = Cli::try_parse_from(["leetrs", "daily", "-b"]).unwrap();
+        match cli.command {
+            Some(Commands::Daily { browser, .. }) => {
+                assert!(browser);
+            }
+            other => panic!("unexpected command: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_daily_with_language_preview_and_browser() {
+        let cli = Cli::try_parse_from(["leetrs", "daily", "rust", "-p", "-b"]).unwrap();
+        match cli.command {
+            Some(Commands::Daily {
+                language,
+                preview,
+                browser,
+            }) => {
+                assert_eq!(language, Some(Language::Rust));
+                assert!(preview);
+                assert!(browser);
+            }
+            other => panic!("unexpected command: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_pick_with_browser() {
+        let cli = Cli::try_parse_from(["leetrs", "pick", "1", "--browser"]).unwrap();
+        match cli.command {
+            Some(Commands::Pick { browser, .. }) => {
+                assert!(browser);
+            }
+            other => panic!("unexpected command: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_pick_slug_with_browser_and_preview() {
+        let cli = Cli::try_parse_from(["leetrs", "pick", "two-sum", "-b", "-p"]).unwrap();
+        match cli.command {
+            Some(Commands::Pick {
+                identifier,
+                preview,
+                browser,
+                ..
+            }) => {
+                assert_eq!(identifier, Identifier::String("two-sum".to_string()));
+                assert!(preview);
+                assert!(browser);
+            }
+            other => panic!("unexpected command: {:?}", other),
+        }
     }
 }

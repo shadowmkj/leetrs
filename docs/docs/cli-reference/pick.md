@@ -25,6 +25,7 @@ leetrs pick <IDENTIFIER> [LANGUAGE] [FLAGS]
 | `<IDENTIFIER>` | `string` / `number` | Yes | Problem slug (e.g. `two-sum`) or numerical ID (e.g. `1`). |
 | `[LANGUAGE]` | `string` | No | Language slug override (`rust`, `python3`, `pythondata`, `mysql`, `postgresql`). Defaults to `config.toml` setting. |
 | `-p`, `--preview` | `flag` | No | Print problem description Markdown directly to `stdout` without opening an editor. |
+| `-b`, `--browser` | `flag` | No | Open the problem in your default web browser alongside the editor. |
 
 ---
 
@@ -57,6 +58,12 @@ leetrs pick two-sum rust
 
 ```bash
 leetrs pick 1 --preview
+```
+
+### Pick Problem and Open in Browser
+
+```bash
+leetrs pick 1 -b
 ```
 
 ---

@@ -105,21 +105,24 @@ pub fn handle_status() {
 /// Resolves and writes the problem files, then opens Neovim with the description
 /// and code side-by-side in a vertical split.
 ///
-/// When `preview` is true the Markdown description is printed to stdout
-/// instead of opening an editor.
+/// When `preview` is true, the question is printed to stdout instead of opening
+/// an editor. When `browser` is true, the problem link is also opened in the
+/// default web browser in addition to the default behavior.
 pub async fn handle_pick(
     identifier: &Identifier,
     language: &Option<Language>,
     preview: bool,
+    browser: bool,
 ) -> std::result::Result<(), String> {
     let picker = make_picker().await?;
-    pick_and_open(&picker, identifier, language, preview).await
+    pick_and_open(&picker, identifier, language, preview, browser).await
 }
 
 /// Fetches today's Problem of the Day and opens it the way `pick` does.
 pub async fn handle_daily(
     language: &Option<Language>,
     preview: bool,
+    browser: bool,
 ) -> std::result::Result<(), String> {
     let picker = make_picker().await?;
     let daily = picker
@@ -147,7 +150,7 @@ pub async fn handle_daily(
     }
 
     let identifier = Identifier::String(question.title_slug.clone());
-    pick_and_open(&picker, &identifier, language, preview).await
+    pick_and_open(&picker, &identifier, language, preview, browser).await
 }
 
 /// Decides whether a premium-only daily problem can be picked.
@@ -309,18 +312,29 @@ pub async fn open_tui(language: &Option<Language>) {
 
 /// Resolves and writes the problem files, then opens the configured editor.
 ///
-/// When `preview` is true, the Markdown description is printed to stdout
-/// instead of opening an editor.
+/// When `preview` is true, the question is printed to stdout instead of opening
+/// an editor. When `browser` is true, the problem link is also opened in the
+/// default web browser in addition to the default behavior.
 pub async fn pick_and_open(
     picker: &Picker,
     identifier: &Identifier,
     language: &Option<Language>,
     preview: bool,
+    browser: bool,
 ) -> std::result::Result<(), String> {
     let (code, desc) = picker
         .pick(identifier, language)
         .await
         .map_err(|e| format!("{}", e))?;
+
+    if browser {
+        let slug = slug_from_path(&desc);
+        let url = problem_url(&slug);
+        match open::that(&url) {
+            Ok(_) => eprintln!("🌐 Opened {} in browser", url),
+            Err(e) => eprintln!("⚠️ Failed to open browser: {}", e),
+        }
+    }
 
     if !preview {
         let config = CONFIG
@@ -365,6 +379,20 @@ pub async fn pick_and_open(
         print!("{}", content);
     }
     Ok(())
+}
+
+/// Derives the problem slug from a description file path (e.g. "two_sum.md" -> "two-sum").
+pub fn slug_from_path(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.replace('_', "-"))
+        .unwrap_or_default()
+}
+
+/// Returns the LeetCode problem URL for the given slug.
+pub fn problem_url(slug: &str) -> String {
+    format!("https://leetcode.com/problems/{}", slug)
 }
 
 #[cfg(test)]
@@ -468,5 +496,18 @@ mod tests {
     fn test_resolve_custom_cases_rejects_both_sources() {
         let err = resolve_custom_cases(Some("1"), Some(Path::new("x.txt"))).unwrap_err();
         assert!(err.contains("cannot specify both"));
+    }
+
+    #[test]
+    fn test_slug_from_path_and_problem_url() {
+        assert_eq!(slug_from_path("two_sum.md"), "two-sum");
+        assert_eq!(
+            slug_from_path("/path/to/longest_palindromic_substring.md"),
+            "longest-palindromic-substring"
+        );
+        assert_eq!(
+            problem_url("two-sum"),
+            "https://leetcode.com/problems/two-sum"
+        );
     }
 }
