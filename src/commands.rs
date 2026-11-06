@@ -531,4 +531,48 @@ mod tests {
             "https://leetcode.com/problems/two-sum"
         );
     }
+
+    #[test]
+    fn test_handle_status() {
+        let _ = handle_status();
+    }
+
+    #[test]
+    fn test_handle_completion_shell() {
+        use clap::Command;
+        struct DummyCli;
+        impl CommandFactory for DummyCli {
+            fn command() -> Command {
+                Command::new("leetrs")
+            }
+            fn command_for_update() -> Command {
+                Command::new("leetrs")
+            }
+        }
+        let res = handle_completion::<DummyCli>(&Shell::Bash);
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_test_missing_file() {
+        let res = handle_test("definitely_missing_file_xyz123.rs", None, None).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_test_conflicting_cases() {
+        let res = handle_test("dummy.rs", Some("1"), Some(Path::new("dummy.txt"))).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_submit_missing_file() {
+        let res = handle_submit("definitely_missing_file_xyz123.rs").await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_open_tui_unauthenticated_or_error() {
+        let _ = open_tui(&None).await;
+    }
 }

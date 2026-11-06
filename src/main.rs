@@ -107,6 +107,10 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
+    execute(cli).await
+}
+
+pub(crate) async fn execute(cli: Cli) -> std::process::ExitCode {
     match run_command(cli).await {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(e) => {
@@ -329,5 +333,62 @@ mod tests {
             res.is_err(),
             "run_command for Submit with missing file should return Err"
         );
+    }
+
+    #[tokio::test]
+    async fn test_run_command_completion_bash() {
+        let cli = Cli {
+            verbose: false,
+            command: Some(Commands::Completion {
+                shell: clap_complete::Shell::Bash,
+            }),
+        };
+        let res = run_command(cli).await;
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_run_command_status() {
+        let cli = Cli {
+            verbose: false,
+            command: Some(Commands::Status),
+        };
+        let _ = run_command(cli).await;
+    }
+
+    #[tokio::test]
+    async fn test_run_command_tui_and_none() {
+        let cli_tui = Cli {
+            verbose: false,
+            command: Some(Commands::Tui { language: None }),
+        };
+        let _ = run_command(cli_tui).await;
+
+        let cli_none = Cli {
+            verbose: false,
+            command: None,
+        };
+        let _ = run_command(cli_none).await;
+    }
+
+    #[tokio::test]
+    async fn test_execute_success_and_failure() {
+        let cli_ok = Cli {
+            verbose: false,
+            command: Some(Commands::Completion {
+                shell: clap_complete::Shell::Bash,
+            }),
+        };
+        let code_ok = execute(cli_ok).await;
+        assert_eq!(code_ok, std::process::ExitCode::SUCCESS);
+
+        let cli_err = Cli {
+            verbose: false,
+            command: Some(Commands::Submit {
+                file: "definitely_nonexistent_file_xyz123.rs".to_string(),
+            }),
+        };
+        let code_err = execute(cli_err).await;
+        assert_eq!(code_err, std::process::ExitCode::FAILURE);
     }
 }
