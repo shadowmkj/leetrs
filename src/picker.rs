@@ -9,7 +9,10 @@ use crate::error::EngineError;
 use crate::format::format_result;
 use crate::models::{Identifier, ProblemSummary, UserDetail};
 use crate::services::submission::SubmissionService;
-use crate::{client::LeetCodeClient, models::Language};
+use crate::{
+    client::{LeetCodeApi, LeetCodeClient},
+    models::Language,
+};
 use std::fs;
 use std::path::Path;
 
@@ -18,15 +21,17 @@ use std::path::Path;
 /// Constructed once per command invocation and shared across async tasks via
 /// clone (the inner [`LeetCodeClient`] is `Clone`).
 #[derive(Clone)]
-pub struct Picker {
-    pub client: LeetCodeClient,
+pub struct Picker<C = LeetCodeClient> {
+    pub client: C,
 }
 
-impl Picker {
-    pub fn new(client: LeetCodeClient) -> Self {
+impl<C> Picker<C> {
+    pub fn new(client: C) -> Self {
         Picker { client }
     }
+}
 
+impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     /// Resolves a problem by [`Identifier`], writes the Markdown description
     /// and language-specific code stub to disk, and returns their paths.
     ///
@@ -60,12 +65,26 @@ impl Picker {
             }
         };
 
-        //TODO: If language is specified, must open that file
-        // else open the file with matching slug.
         // Early-return if files already exist: we preserve existing user code as-is
         // without rewriting comment headers.
-        if let Identifier::String(ident) = identifier {
-            let snake_slug = ident.replace("-", "_");
+        let cached_slug = if let Identifier::Number(num) = identifier {
+            let cache = CacheService::new();
+            if let Ok(Some(problems)) = cache.read::<Vec<ProblemSummary>>("data.json") {
+                problems.into_iter().find(|p| p.id == *num).map(|p| p.slug)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let early_slug = match identifier {
+            Identifier::String(ident) => Some(ident.as_str()),
+            Identifier::Number(_) => cached_slug.as_deref(),
+        };
+
+        if let Some(slug) = early_slug {
+            let snake_slug = slug.replace("-", "_");
             let code_filename = format!("{}.{}", snake_slug, language.code_extension());
             let desc_filename = format!("{}.md", snake_slug);
             if Path::new(&code_filename).exists() && Path::new(&desc_filename).exists() {
@@ -104,31 +123,50 @@ impl Picker {
             }
         };
 
-        //  determine filenames (converting kebab-case to snake_case)
+        // determine filenames (converting kebab-case to snake_case)
         let snake_slug = question.title_slug.replace("-", "_");
         let code_filename = format!("{}.{}", snake_slug, language.code_extension());
         let desc_filename = format!("{}.md", snake_slug);
 
-        // Write metadata comment at the top of the generated code file.
-        // We use `question_frontend_id` (the public problem number on LeetCode) so the file
-        // header displays the familiar number matching the website and CLI search.
-        let meta = format!(
-            "{} id={} slug={} lang={}",
-            language.meta_comment_prefix(),
-            question.question_frontend_id,
-            question.title_slug,
-            language.to_lang_slug()
-        );
+        let code_path = Path::new(&code_filename);
+        let desc_path = Path::new(&desc_filename);
 
-        if let Err(e) = fs::write(&code_filename, format!("{}\n\n{}", meta, snippet.code)) {
-            eprintln!("❌ failed to write code file: {}", e);
-            return Err(EngineError::System);
+        // Never overwrite an existing code file: protect user code.
+        let mut generated = false;
+        if code_path.exists() {
+            println!("📄 Keeping existing {}", code_filename);
+        } else {
+            // Write metadata comment at the top of the generated code file.
+            // We use `question_frontend_id` (the public problem number on LeetCode) so the file
+            // header displays the familiar number matching the website and CLI search.
+            let meta = format!(
+                "{} id={} slug={} lang={}",
+                language.meta_comment_prefix(),
+                question.question_frontend_id,
+                question.title_slug,
+                language.to_lang_slug()
+            );
+
+            if let Err(e) = fs::write(&code_filename, format!("{}\n\n{}", meta, snippet.code)) {
+                eprintln!("❌ failed to write code file: {}", e);
+                return Err(EngineError::System);
+            }
+            generated = true;
         }
-        if let Err(e) = fs::write(&desc_filename, md_content) {
-            eprintln!("❌ failed to write description file: {}", e);
-            return Err(EngineError::System);
+
+        if desc_path.exists() {
+            println!("📄 Keeping existing {}", desc_filename);
+        } else {
+            if let Err(e) = fs::write(&desc_filename, md_content) {
+                eprintln!("❌ failed to write description file: {}", e);
+                return Err(EngineError::System);
+            }
+            generated = true;
         }
-        println!("✅ files generated successfully.");
+
+        if generated {
+            println!("✅ files generated successfully.");
+        }
 
         Ok((code_filename, desc_filename))
     }
@@ -414,5 +452,283 @@ mod tests {
         // Verify topic "Array" was attached to problem #1550 (not problem #1677)
         assert_eq!(problems[0].topics, vec!["Array"]);
         assert_eq!(problems[1].topics, vec!["Database"]);
+    }
+
+    use crate::models::{Question, QuestionSnippet};
+
+    #[derive(Clone)]
+    struct MockLeetCodeClient {
+        question: Question,
+    }
+
+    impl LeetCodeApi for MockLeetCodeClient {
+        async fn get_question_by_slug(&self, _title_slug: &str) -> crate::error::Result<Question> {
+            Ok(self.question.clone())
+        }
+
+        async fn get_question_by_id(&self, _id: u64) -> crate::error::Result<Question> {
+            Ok(self.question.clone())
+        }
+
+        async fn test_code(
+            &self,
+            _title_slug: &str,
+            _question_id: &str,
+            _lang: &str,
+            _code: &str,
+            _test_cases: &str,
+        ) -> crate::error::Result<String> {
+            unimplemented!()
+        }
+
+        async fn submit_code(
+            &self,
+            _title_slug: &str,
+            _question_id: &str,
+            _lang: &str,
+            _code: &str,
+        ) -> crate::error::Result<u64> {
+            unimplemented!()
+        }
+
+        async fn check_test_submission(
+            &self,
+            _interpret_id: String,
+        ) -> crate::error::Result<crate::models::TestSubmissionCheckResult> {
+            unimplemented!()
+        }
+
+        async fn check_submission(
+            &self,
+            _submission_id: u64,
+        ) -> crate::error::Result<crate::models::SubmissionCheckResult> {
+            unimplemented!()
+        }
+
+        async fn get_user_detail(&self) -> crate::error::Result<crate::models::UserDetail> {
+            unimplemented!()
+        }
+
+        async fn get_topics_question_list(
+            &self,
+        ) -> crate::error::Result<Vec<crate::models::QuestionTopics>> {
+            unimplemented!()
+        }
+
+        async fn get_problem_list(
+            &self,
+        ) -> crate::error::Result<(
+            Vec<crate::models::ProblemSummary>,
+            std::collections::HashMap<u64, u64>,
+        )> {
+            unimplemented!()
+        }
+
+        async fn get_daily_challenge(
+            &self,
+        ) -> crate::error::Result<crate::models::ActiveDailyQuestion> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn pick_by_id_does_not_overwrite_existing_solution() {
+        let code_file = "test_pick_data_loss_problem.rs";
+        let desc_file = "test_pick_data_loss_problem.md";
+        let _ = fs::remove_file(code_file);
+        let _ = fs::remove_file(desc_file);
+
+        let user_code = "// My solved solution for problem 9999\nimpl Solution {}";
+        fs::write(code_file, user_code).unwrap();
+
+        let mock_question = Question {
+            question_id: "9999".to_string(),
+            question_frontend_id: "9999".to_string(),
+            title_slug: "test-pick-data-loss-problem".to_string(),
+            title: "Test Pick Data Loss Problem".to_string(),
+            content: "<p>Problem content</p>".to_string(),
+            example_test_cases: "".to_string(),
+            code_snippets: vec![QuestionSnippet {
+                lang_slug: "rust".to_string(),
+                code: "// Empty starter code from leetcode".to_string(),
+            }],
+        };
+
+        let picker = Picker::new(MockLeetCodeClient {
+            question: mock_question,
+        });
+
+        let res = picker
+            .pick(&Identifier::Number(9999), &Some(Language::Rust))
+            .await;
+        assert!(res.is_ok());
+
+        let code_content = fs::read_to_string(code_file).unwrap();
+        let _ = fs::remove_file(code_file);
+        let _ = fs::remove_file(desc_file);
+
+        assert_eq!(
+            code_content, user_code,
+            "Existing solution code must NOT be overwritten when picking by ID!"
+        );
+    }
+
+    #[tokio::test]
+    async fn pick_by_slug_keeps_existing_code_when_desc_is_missing() {
+        let code_file = "test_missing_desc_problem.rs";
+        let desc_file = "test_missing_desc_problem.md";
+        let _ = fs::remove_file(code_file);
+        let _ = fs::remove_file(desc_file);
+
+        let user_code = "// My existing solution without description\nimpl Solution {}";
+        fs::write(code_file, user_code).unwrap();
+
+        let mock_question = Question {
+            question_id: "8888".to_string(),
+            question_frontend_id: "8888".to_string(),
+            title_slug: "test-missing-desc-problem".to_string(),
+            title: "Test Missing Desc Problem".to_string(),
+            content: "<p>Problem content</p>".to_string(),
+            example_test_cases: "".to_string(),
+            code_snippets: vec![QuestionSnippet {
+                lang_slug: "rust".to_string(),
+                code: "// Empty starter code".to_string(),
+            }],
+        };
+
+        let picker = Picker::new(MockLeetCodeClient {
+            question: mock_question,
+        });
+
+        let res = picker
+            .pick(
+                &Identifier::String("test-missing-desc-problem".to_string()),
+                &Some(Language::Rust),
+            )
+            .await;
+        assert!(res.is_ok());
+
+        let code_content = fs::read_to_string(code_file).unwrap();
+        let desc_exists = Path::new(desc_file).exists();
+        let _ = fs::remove_file(code_file);
+        let _ = fs::remove_file(desc_file);
+
+        assert_eq!(
+            code_content, user_code,
+            "Existing code must be preserved even if description was missing!"
+        );
+        assert!(desc_exists, "Missing description file should be created!");
+    }
+
+    #[tokio::test]
+    async fn pick_by_id_fast_path_when_in_cache_skips_network() {
+        let code_file = "test_fast_path_problem.rs";
+        let desc_file = "test_fast_path_problem.md";
+        let _ = fs::remove_file(code_file);
+        let _ = fs::remove_file(desc_file);
+
+        let user_code = "// Fast path user code";
+        let user_desc = "# Fast path problem description";
+        fs::write(code_file, user_code).unwrap();
+        fs::write(desc_file, user_desc).unwrap();
+
+        // Write cached problem entry
+        let cache = CacheService::new();
+        let cached_problems = vec![ProblemSummary {
+            id: 7777,
+            title: "Test Fast Path Problem".to_string(),
+            slug: "test-fast-path-problem".to_string(),
+            difficulty: 1,
+            acceptance: 60.0,
+            accepted: 100,
+            submitted: 200,
+            status: None,
+            is_paid: false,
+            topics: vec![],
+        }];
+        cache.write("data.json", &cached_problems).unwrap();
+
+        // Mock client that panics if any network method is called
+        #[derive(Clone)]
+        struct PanickingMockClient;
+        impl LeetCodeApi for PanickingMockClient {
+            async fn get_question_by_slug(
+                &self,
+                _title_slug: &str,
+            ) -> crate::error::Result<Question> {
+                panic!("Network should not be called when both files exist and slug is cached!");
+            }
+            async fn get_question_by_id(&self, _id: u64) -> crate::error::Result<Question> {
+                panic!("Network should not be called when both files exist and slug is cached!");
+            }
+            async fn test_code(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> crate::error::Result<String> {
+                unimplemented!()
+            }
+            async fn submit_code(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> crate::error::Result<u64> {
+                unimplemented!()
+            }
+            async fn check_test_submission(
+                &self,
+                _: String,
+            ) -> crate::error::Result<crate::models::TestSubmissionCheckResult> {
+                unimplemented!()
+            }
+            async fn check_submission(
+                &self,
+                _: u64,
+            ) -> crate::error::Result<crate::models::SubmissionCheckResult> {
+                unimplemented!()
+            }
+            async fn get_user_detail(&self) -> crate::error::Result<crate::models::UserDetail> {
+                unimplemented!()
+            }
+            async fn get_topics_question_list(
+                &self,
+            ) -> crate::error::Result<Vec<crate::models::QuestionTopics>> {
+                unimplemented!()
+            }
+            async fn get_problem_list(
+                &self,
+            ) -> crate::error::Result<(
+                Vec<crate::models::ProblemSummary>,
+                std::collections::HashMap<u64, u64>,
+            )> {
+                unimplemented!()
+            }
+            async fn get_daily_challenge(
+                &self,
+            ) -> crate::error::Result<crate::models::ActiveDailyQuestion> {
+                unimplemented!()
+            }
+        }
+
+        let picker = Picker::new(PanickingMockClient);
+        let res = picker
+            .pick(&Identifier::Number(7777), &Some(Language::Rust))
+            .await;
+
+        let code_content = fs::read_to_string(code_file).unwrap();
+        let desc_content = fs::read_to_string(desc_file).unwrap();
+
+        // Clean up
+        let _ = fs::remove_file(code_file);
+        let _ = fs::remove_file(desc_file);
+
+        assert!(res.is_ok());
+        assert_eq!(code_content, user_code);
+        assert_eq!(desc_content, user_desc);
     }
 }
