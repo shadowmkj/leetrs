@@ -243,4 +243,20 @@ mod tests {
         assert_eq!(q.title, "Three Consecutive Odds");
         assert_eq!(q.code_snippets.len(), 1);
     }
+
+    #[test]
+    fn test_submission_check_result_deserializes_compile_error() {
+        let raw = r#"{
+            "state": "SUCCESS",
+            "status_msg": "Compile Error",
+            "compile_error": "Line 5: syntax error",
+            "full_compile_error": "Full compile error details"
+        }"#;
+        let r: TestSubmissionCheckResult = serde_json::from_str(raw).unwrap();
+        assert_eq!(r.compile_error.as_deref(), Some("Line 5: syntax error"));
+        assert_eq!(
+            r.full_compile_error.as_deref(),
+            Some("Full compile error details")
+        );
+    }
 }
