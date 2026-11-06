@@ -136,22 +136,27 @@ impl Picker {
     /// Runs the solution file against `custom_cases`, or the problem's built-in
     /// example test cases when `None`, and prints the result, but **does not**
     /// record it as an official submission.
-    pub async fn test_submit(&self, file: &str, custom_cases: Option<&str>) {
+    pub async fn test_submit(
+        &self,
+        file: &str,
+        custom_cases: Option<&str>,
+    ) -> crate::error::Result<crate::services::submission::SubmissionResult> {
         let service = SubmissionService::new(self.client.clone());
-        match service.submit_or_test(file, true, custom_cases).await {
-            Ok(result) => format_result(&result),
-            Err(e) => eprintln!("❌ {}", e),
-        }
+        let result = service.submit_or_test(file, true, custom_cases).await?;
+        format_result(&result);
+        Ok(result)
     }
 
     /// Submits the solution file to LeetCode for full judging and prints the
     /// verdict, test-case counts, and performance percentiles.
-    pub async fn submit(&self, file: &str) {
+    pub async fn submit(
+        &self,
+        file: &str,
+    ) -> crate::error::Result<crate::services::submission::SubmissionResult> {
         let service = SubmissionService::new(self.client.clone());
-        match service.submit_or_test(file, false, None).await {
-            Ok(result) => format_result(&result),
-            Err(e) => eprintln!("❌ {}", e),
-        }
+        let result = service.submit_or_test(file, false, None).await?;
+        format_result(&result);
+        Ok(result)
     }
 
     /// Returns the cached user profile, refreshing it in the background.

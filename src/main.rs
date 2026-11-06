@@ -86,7 +86,7 @@ fn parse_identifier(s: &str) -> Result<Identifier, String> {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> std::process::ExitCode {
     let cli = Cli::parse();
 
     let mut builder = env_logger::Builder::from_default_env();
@@ -95,57 +95,52 @@ async fn main() -> anyhow::Result<()> {
     }
     let _ = builder.try_init();
 
-    let config = Config::new().expect("Error parsing config file");
-    CONFIG.set(config).expect("Config already initialized");
+    let config = match Config::new() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("❌ Error parsing config file: {}", e);
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = CONFIG.set(config) {
+        eprintln!("❌ Config already initialized: {:?}", e);
+        return std::process::ExitCode::FAILURE;
+    }
 
-    match &cli.command {
+    match run_command(cli).await {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("❌ {}", e);
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+pub(crate) async fn run_command(cli: Cli) -> std::result::Result<(), String> {
+    match cli.command {
         Some(Commands::Auth) => commands::handle_auth(),
-        Some(Commands::Tui { language }) => commands::open_tui(language).await,
+        Some(Commands::Tui { language }) => commands::open_tui(&language).await,
         Some(Commands::Status) => commands::handle_status(),
         Some(Commands::Daily {
             language,
             preview,
             browser,
-        }) => {
-            if let Err(e) = commands::handle_daily(language, *preview, *browser).await {
-                eprintln!("❌ {}", e);
-            }
-        }
+        }) => commands::handle_daily(&language, preview, browser).await,
         Some(Commands::Pick {
             identifier,
             language,
             preview,
             browser,
-        }) => {
-            if let Err(e) = commands::handle_pick(identifier, language, *preview, *browser).await {
-                eprintln!("❌ {}", e);
-            }
-        }
+        }) => commands::handle_pick(&identifier, &language, preview, browser).await,
         Some(Commands::Test {
             file,
             cases,
             cases_file,
-        }) => {
-            if let Err(e) =
-                commands::handle_test(file, cases.as_deref(), cases_file.as_deref()).await
-            {
-                eprintln!("❌ {}", e);
-            }
-        }
-        Some(Commands::Submit { file }) => {
-            if let Err(e) = commands::handle_submit(file).await {
-                eprintln!("❌ {}", e);
-            }
-        }
-        Some(Commands::Completion { shell }) => {
-            if let Err(e) = commands::handle_completion::<Cli>(shell) {
-                eprintln!("❌ {}", e);
-            }
-        }
+        }) => commands::handle_test(&file, cases.as_deref(), cases_file.as_deref()).await,
+        Some(Commands::Submit { file }) => commands::handle_submit(&file).await,
+        Some(Commands::Completion { shell }) => commands::handle_completion::<Cli>(&shell),
         None => commands::open_tui(&None).await,
-    };
-
-    Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -302,5 +297,37 @@ mod tests {
             }
             other => panic!("unexpected command: {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn test_run_command_test_nonexistent_file_returns_err() {
+        let cli = Cli {
+            verbose: false,
+            command: Some(Commands::Test {
+                file: "definitely_nonexistent_file_xyz123.rs".to_string(),
+                cases: None,
+                cases_file: None,
+            }),
+        };
+        let res = run_command(cli).await;
+        assert!(
+            res.is_err(),
+            "run_command for Test with missing file should return Err"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_run_command_submit_nonexistent_file_returns_err() {
+        let cli = Cli {
+            verbose: false,
+            command: Some(Commands::Submit {
+                file: "definitely_nonexistent_file_xyz123.rs".to_string(),
+            }),
+        };
+        let res = run_command(cli).await;
+        assert!(
+            res.is_err(),
+            "run_command for Submit with missing file should return Err"
+        );
     }
 }
