@@ -14,8 +14,8 @@ Launches the interactive Ratatui terminal browser for searching, filtering, and 
 
 ```bash
 leetrs tui [LANGUAGE]
-# — or simply —
-leetrs [LANGUAGE]
+# — or simply (defaults to tui with no arguments) —
+leetrs
 ```
 
 ---
@@ -24,7 +24,7 @@ leetrs [LANGUAGE]
 
 | Argument | Type | Optional | Description |
 |---|---|---|---|
-| `LANGUAGE` | `string` | Yes | Temporary language override for the current TUI session (e.g. `rust`, `python3`, `mysql`). Overrides `config.toml` for stub generation. |
+| `LANGUAGE` | `string` | Yes | Temporary language override for the current TUI session (`python`, `rust`, `pandas`, `mysql`, `postgres`). Overrides `config.toml` for stub generation. |
 
 ---
 

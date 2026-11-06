@@ -31,7 +31,7 @@ leetrs daily [OPTIONS] [LANGUAGE]
 | Option | Type | Required | Description |
 |---|---|---|---|
 | `-p`, `--preview` | `flag` | No | Print the problem description Markdown to `stdout` without opening an editor. |
-| `-b`, `--browser` | `flag` | No | Open the problem in your default web browser alongside the editor. |
+| `-b`, `--browser` | `flag` | No | Open the problem in your default web browser in addition to default behavior. |
 
 ---
 

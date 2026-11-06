@@ -74,7 +74,7 @@ Alternatively, pick a problem directly by numeric ID or slug from your terminal:
 ```bash
 leetrs pick 1
 # — or —
-leetrs pick two-sum --language rust
+leetrs pick two-sum rust
 ```
 
 `leetrs` will:

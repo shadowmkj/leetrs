@@ -23,9 +23,9 @@ leetrs pick <IDENTIFIER> [LANGUAGE] [FLAGS]
 | Argument / Flag | Type | Required | Description |
 |---|---|---|---|
 | `<IDENTIFIER>` | `string` / `number` | Yes | Problem slug (e.g. `two-sum`) or numerical ID (e.g. `1`). |
-| `[LANGUAGE]` | `string` | No | Language slug override (`rust`, `python3`, `pythondata`, `mysql`, `postgresql`). Defaults to `config.toml` setting. |
+| `[LANGUAGE]` | `string` | No | Language for the code template (`python`, `rust`, `pandas`, `mysql`, `postgres`). Defaults to `config.toml` setting. |
 | `-p`, `--preview` | `flag` | No | Print problem description Markdown directly to `stdout` without opening an editor. |
-| `-b`, `--browser` | `flag` | No | Open the problem in your default web browser alongside the editor. |
+| `-b`, `--browser` | `flag` | No | Open the problem in your default web browser in addition to default behavior. |
 
 ---
 

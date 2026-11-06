@@ -17,11 +17,11 @@ sidebar_position: 1
 | [`auth`](./auth-and-status.md) | — | Interactively authenticate via auto-detected browser (Chrome, Firefox, Brave, Edge, Arc) or cURL / Cookie header |
 | [`status`](./auth-and-status.md) | — | Display active authentication status and token previews |
 | [`tui`](./tui.md) | `[language]` | Launch interactive Ratatui terminal problem browser |
-| [`pick`](./pick.md) | `<identifier>` `[language]` `[-p, --preview]` | Fetch problem description & stub, generate local files, and open editor |
-| [`daily`](./daily.md) | `[-l, --language <language>]` `[-p, --preview]` | Pick today's LeetCode Problem of the Day |
-| [`test`](./test-and-submit.md) | `<file>` | Test local solution against sample test cases without official submission |
+| [`pick`](./pick.md) | `<identifier>` `[language]` `[-p, --preview]` `[-b, --browser]` | Fetch problem description & stub, generate local files, and open editor |
+| [`daily`](./daily.md) | `[language]` `[-p, --preview]` `[-b, --browser]` | Pick today's LeetCode Problem of the Day |
+| [`test`](./test-and-submit.md) | `<file>` `[-c, --cases <input> \| --cases-file <path>]` | Test local solution against sample test cases without official submission |
 | [`submit`](./test-and-submit.md) | `<file>` | Submit local solution to LeetCode for full judging and statistics |
-| [`completion`](./completion.md) | `<shell>` | Generate shell autocomplete scripts (`bash`, `zsh`, `fish`) |
+| [`completion`](./completion.md) | `<shell>` | Generate shell autocomplete scripts (`bash`, `zsh`, `fish`, `elvish`, `powershell`) |
 
 ---
 
@@ -30,7 +30,7 @@ sidebar_position: 1
 | Flag | Short | Description |
 |---|---|---|
 | `--help` | `-h` | Print help information for `leetrs` or any subcommand |
-| `--version` | `-V` | Print version information (`leetrs 1.2.0`) |
+| `--version` | `-V` | Print version information (`leetrs 1.2.1`) |
 
 ---
 
