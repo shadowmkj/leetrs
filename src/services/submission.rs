@@ -150,16 +150,19 @@ impl SubmissionService {
         let dir = solutions_dir();
         let path = resolve_solution_file(file, &dir);
         let code = std::fs::read_to_string(&path).map_err(|e| {
-            // Only name solutions_dir when it was actually searched.
-            let also = if dir.as_os_str().is_empty() || Path::new(file).is_absolute() {
-                String::new()
+            let msg = if path.exists() {
+                format!("could not read '{}': {}", path.display(), e)
+            } else if !dir.as_os_str().is_empty() && !Path::new(file).is_absolute() {
+                format!(
+                    "could not read '{}' (also looked in {}): {}",
+                    file,
+                    dir.display(),
+                    e
+                )
             } else {
-                format!(" (also looked in {})", dir.display())
+                format!("could not read '{}': {}", file, e)
             };
-            EngineError::Io(std::io::Error::new(
-                e.kind(),
-                format!("could not read '{}'{}: {}", file, also, e),
-            ))
+            EngineError::Io(std::io::Error::new(e.kind(), msg))
         })?;
 
         let file_stem = path
@@ -501,6 +504,34 @@ mod tests {
         let err = service
             .submit_or_test("non_existent_problem_file_xyz.rs", true, None)
             .await;
-        assert!(matches!(err, Err(EngineError::Io(_))));
+        match err {
+            Err(EngineError::Io(e)) => {
+                let msg = e.to_string();
+                assert!(msg.contains("could not read 'non_existent_problem_file_xyz.rs'"));
+                assert!(!msg.contains("also looked in"));
+            }
+            _ => panic!("expected EngineError::Io"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submission_service_existing_unreadable_file_names_path() {
+        let creds = LeetCodeCredentials {
+            session_cookie: "dummy_session".to_string(),
+            csrf_token: "dummy_csrf".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).expect("client creation failed");
+        let service = SubmissionService::new(client);
+
+        // "src" is a directory so read_to_string fails, but path.exists() is true.
+        let err = service.submit_or_test("src", true, None).await;
+        match err {
+            Err(EngineError::Io(e)) => {
+                let msg = e.to_string();
+                assert!(msg.contains("could not read 'src'"));
+                assert!(!msg.contains("also looked in"));
+            }
+            _ => panic!("expected EngineError::Io"),
+        }
     }
 }

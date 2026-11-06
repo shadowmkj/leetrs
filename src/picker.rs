@@ -11,7 +11,6 @@ use crate::models::{Identifier, ProblemSummary, UserDetail};
 use crate::services::submission::SubmissionService;
 use crate::{client::LeetCodeClient, models::Language};
 use std::fs;
-use std::path::Path;
 
 /// Orchestrates problem fetching, file generation, submission, and caching.
 ///
@@ -67,14 +66,25 @@ impl Picker {
         let dir = solutions_dir();
         if let Identifier::String(ident) = identifier {
             let snake_slug = ident.replace("-", "_");
-            let code_filename = dir.join(format!("{}.{}", snake_slug, language.code_extension()));
-            let desc_filename = dir.join(format!("{}.md", snake_slug));
-            if code_filename.exists() && desc_filename.exists() {
+            let code_path = dir.join(format!("{}.{}", snake_slug, language.code_extension()));
+            let desc_path = dir.join(format!("{}.md", snake_slug));
+            if code_path.exists() && desc_path.exists() {
                 return Ok((
-                    code_filename.display().to_string(),
-                    desc_filename.display().to_string(),
+                    code_path.display().to_string(),
+                    desc_path.display().to_string(),
                 ));
             }
+        }
+
+        if !dir.as_os_str().is_empty() {
+            fs::create_dir_all(&dir).map_err(|e| {
+                eprintln!(
+                    "❌ failed to create solutions directory {}: {}",
+                    dir.display(),
+                    e
+                );
+                EngineError::System
+            })?;
         }
 
         let question = match identifier {
@@ -108,22 +118,10 @@ impl Picker {
             }
         };
 
-        //  determine filenames (converting kebab-case to snake_case)
+        // determine filenames (converting kebab-case to snake_case)
         let snake_slug = question.title_slug.replace("-", "_");
-        let code_filename = dir
-            .join(format!("{}.{}", snake_slug, language.code_extension()))
-            .display()
-            .to_string();
-        let desc_filename = dir.join(format!("{}.md", snake_slug)).display().to_string();
-
-        if let Err(e) = fs::create_dir_all(&dir) {
-            eprintln!(
-                "❌ failed to create solutions directory {}: {}",
-                dir.display(),
-                e
-            );
-            return Err(EngineError::System);
-        }
+        let code_path = dir.join(format!("{}.{}", snake_slug, language.code_extension()));
+        let desc_path = dir.join(format!("{}.md", snake_slug));
 
         // Write metadata comment at the top of the generated code file.
         // We use `question_frontend_id` (the public problem number on LeetCode) so the file
@@ -139,17 +137,17 @@ impl Picker {
         // Never overwrite an existing file: with a shared solutions_dir, picking
         // a problem by number would otherwise replace saved work.
         let mut generated = false;
-        if Path::new(&code_filename).exists() {
-            println!("📄 keeping existing {}", code_filename);
+        if code_path.exists() {
+            println!("📄 keeping existing {}", code_path.display());
         } else {
-            if let Err(e) = fs::write(&code_filename, format!("{}\n\n{}", meta, snippet.code)) {
+            if let Err(e) = fs::write(&code_path, format!("{}\n\n{}", meta, snippet.code)) {
                 eprintln!("❌ failed to write code file: {}", e);
                 return Err(EngineError::System);
             }
             generated = true;
         }
-        if !Path::new(&desc_filename).exists() {
-            if let Err(e) = fs::write(&desc_filename, md_content) {
+        if !desc_path.exists() {
+            if let Err(e) = fs::write(&desc_path, md_content) {
                 eprintln!("❌ failed to write description file: {}", e);
                 return Err(EngineError::System);
             }
@@ -159,7 +157,10 @@ impl Picker {
             println!("✅ files generated successfully.");
         }
 
-        Ok((code_filename, desc_filename))
+        Ok((
+            code_path.display().to_string(),
+            desc_path.display().to_string(),
+        ))
     }
 
     /// Runs the solution file against `custom_cases`, or the problem's built-in
