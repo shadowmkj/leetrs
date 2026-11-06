@@ -32,7 +32,7 @@ pub async fn make_picker() -> std::result::Result<Picker, String> {
 }
 
 /// Interactive authentication flow — prompts the user to choose a method.
-pub fn handle_auth() {
+pub fn handle_auth() -> std::result::Result<(), String> {
     println!("🔒 LeetCode Authentication\n");
 
     let options = &[
@@ -71,8 +71,14 @@ pub fn handle_auth() {
 
     match credentials_result {
         Ok(creds) => match creds.save() {
-            Ok(_) => println!("\n✅ Authentication successful!"),
-            Err(e) => eprintln!("\n❌ Failed to save credentials: {}", e),
+            Ok(_) => {
+                println!("\n✅ Authentication successful!");
+                Ok(())
+            }
+            Err(e) => {
+                eprintln!("\n❌ Failed to save credentials: {}", e);
+                Err(format!("Failed to save credentials: {}", e))
+            }
         },
         Err(e) => {
             eprintln!("\n❌ Authentication failed: {}", e);
@@ -81,12 +87,13 @@ pub fn handle_auth() {
                     "Tip: Make sure you are logged into leetcode.com on that browser, or try the manual option."
                 );
             }
+            Err(format!("Authentication failed: {}", e))
         }
     }
 }
 
 /// Prints current credential status to stdout.
-pub fn handle_status() {
+pub fn handle_status() -> std::result::Result<(), String> {
     match LeetCodeCredentials::load() {
         Some(creds) => {
             println!("✅ Currently authenticated!");
@@ -94,10 +101,12 @@ pub fn handle_status() {
             println!("{}\n", creds.csrf_token);
             println!("🔑 LEETCODE_SESSION:");
             println!("{}", creds.session_cookie);
+            Ok(())
         }
         None => {
             eprintln!("❌ Not authenticated. No valid credentials found.");
             eprintln!("Run `leetrs auth` to set up your account.");
+            Err("Not authenticated. No valid credentials found.".to_string())
         }
     }
 }
@@ -183,7 +192,14 @@ pub async fn handle_test(
 ) -> std::result::Result<(), String> {
     let custom_cases = resolve_custom_cases(cases, cases_file)?;
     let picker = make_picker().await?;
-    picker.test_submit(file, custom_cases.as_deref()).await;
+    let result = picker
+        .test_submit(file, custom_cases.as_deref())
+        .await
+        .map_err(|e| format!("{}", e))?;
+    let passed = result.correct_answer.unwrap_or(false);
+    if !passed || result.status != crate::services::submission::SubmissionStatus::Accepted {
+        return Err("Test failed".to_string());
+    }
     Ok(())
 }
 
@@ -248,7 +264,10 @@ fn unescape_line_breaks(input: &str) -> String {
 /// Submits the solution to LeetCode for full judging.
 pub async fn handle_submit(file: &str) -> std::result::Result<(), String> {
     let picker = make_picker().await?;
-    picker.submit(file).await;
+    let result = picker.submit(file).await.map_err(|e| format!("{}", e))?;
+    if result.status != crate::services::submission::SubmissionStatus::Accepted {
+        return Err("Submission was not accepted".to_string());
+    }
     Ok(())
 }
 
@@ -278,19 +297,19 @@ fn write_completion(
 }
 
 /// Fetches the full problem list and user data, then launches the interactive TUI.
-pub async fn open_tui(language: &Option<Language>) {
+pub async fn open_tui(language: &Option<Language>) -> std::result::Result<(), String> {
     let creds = match LeetCodeCredentials::load() {
         Some(c) => c,
         None => {
             eprintln!("❌ Not authenticated. Please run `leetrs auth` first.");
-            return;
+            return Err("Not authenticated. Please run `leetrs auth` first.".to_string());
         }
     };
     let client = match LeetCodeClient::new(creds) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("❌ Failed to initialize client: {}", e);
-            return;
+            return Err(format!("Failed to initialize client: {}", e));
         }
     };
     let picker = Picker::new(client);
@@ -299,7 +318,7 @@ pub async fn open_tui(language: &Option<Language>) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("❌ Failed to fetch problems: {}", e);
-            return;
+            return Err(format!("Failed to fetch problems: {}", e));
         }
     };
 
@@ -307,7 +326,9 @@ pub async fn open_tui(language: &Option<Language>) {
     let user_data = picker.get_user_data().await.ok();
     if let Err(e) = crate::tui::run_tui(Rc::clone(&problems), picker, user_data, language).await {
         eprintln!("❌ TUI error: {}", e);
+        return Err(format!("TUI error: {}", e));
     }
+    Ok(())
 }
 
 /// Resolves and writes the problem files, then opens the configured editor.
@@ -509,5 +530,49 @@ mod tests {
             problem_url("two-sum"),
             "https://leetcode.com/problems/two-sum"
         );
+    }
+
+    #[test]
+    fn test_handle_status() {
+        let _ = handle_status();
+    }
+
+    #[test]
+    fn test_handle_completion_shell() {
+        use clap::Command;
+        struct DummyCli;
+        impl CommandFactory for DummyCli {
+            fn command() -> Command {
+                Command::new("leetrs")
+            }
+            fn command_for_update() -> Command {
+                Command::new("leetrs")
+            }
+        }
+        let res = handle_completion::<DummyCli>(&Shell::Bash);
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_handle_test_missing_file() {
+        let res = handle_test("definitely_missing_file_xyz123.rs", None, None).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_test_conflicting_cases() {
+        let res = handle_test("dummy.rs", Some("1"), Some(Path::new("dummy.txt"))).await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_handle_submit_missing_file() {
+        let res = handle_submit("definitely_missing_file_xyz123.rs").await;
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_open_tui_unauthenticated_or_error() {
+        let _ = open_tui(&None).await;
     }
 }
