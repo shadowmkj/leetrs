@@ -231,7 +231,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
                     let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
                         let user_detail = client.get_user_detail().await?;
                         let data = serde_json::to_string(&user_detail)?;
-                        let _ = fs::write(&user_path_bg, &data);
+                        let _ = crate::cache::write_atomic(&user_path_bg, data.as_bytes());
                         Ok(())
                     }
                     .await;
@@ -253,7 +253,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
                 log::debug!("Cache miss: fetching user profile from LeetCode...");
                 let user_detail = self.client.get_user_detail().await?;
                 if let Ok(data) = serde_json::to_string(&user_detail) {
-                    let _ = fs::write(&user_path, &data);
+                    let _ = crate::cache::write_atomic(&user_path, data.as_bytes());
                 }
                 Ok(user_detail)
             }
@@ -286,11 +286,11 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
                             tokio::try_join!(user_res, problems_res, tags_res)?;
 
                         let user_data = serde_json::to_string(&user_detail)?;
-                        let _ = fs::write(&user_path_bg, user_data);
+                        let _ = crate::cache::write_atomic(&user_path_bg, user_data.as_bytes());
 
                         attach_topics(&mut problems, question_tags, &id_map);
                         let data = serde_json::to_string(&problems)?;
-                        let _ = fs::write(&data_path_bg, data);
+                        let _ = crate::cache::write_atomic(&data_path_bg, data.as_bytes());
                         Ok(())
                     }
                     .await;
@@ -316,7 +316,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
                 )?;
                 attach_topics(&mut problems, question_tags, &id_map);
                 if let Ok(data) = serde_json::to_string(&problems) {
-                    let _ = fs::write(&data_path, &data);
+                    let _ = crate::cache::write_atomic(&data_path, data.as_bytes());
                 }
                 Ok(problems)
             }

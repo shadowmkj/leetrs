@@ -613,11 +613,14 @@ impl LeetCodeClient {
                     let internal_id = stat.question_id.unwrap_or(0);
                     let frontend_id = stat.frontend_question_id.unwrap_or(0);
 
-                    if internal_id > 0 && frontend_id > 0 {
+                    if let Some(slug) = stat.question_title_slug
+                        && !slug.is_empty()
+                        && internal_id > 0
+                        && frontend_id > 0
+                    {
                         id_map.insert(internal_id, frontend_id);
 
                         let title = stat.question_title.unwrap_or_default();
-                        let slug = stat.question_title_slug.unwrap_or_default();
                         let level = difficulty.level.unwrap_or(0) as u8;
                         let status = pair.status;
                         let accepted = stat.total_acs.unwrap_or(0);
@@ -949,6 +952,32 @@ mod tests {
                             "status": "ac",
                             "difficulty": { "level": 1 },
                             "paid_only": false
+                        },
+                        {
+                            "stat": {
+                                "question_id": 101,
+                                "frontend_question_id": 2,
+                                "question__title": "Missing Slug Problem",
+                                "question__title_slug": null,
+                                "total_acs": 50,
+                                "total_submitted": 100
+                            },
+                            "status": null,
+                            "difficulty": { "level": 1 },
+                            "paid_only": false
+                        },
+                        {
+                            "stat": {
+                                "question_id": 102,
+                                "frontend_question_id": 3,
+                                "question__title": "Empty Slug Problem",
+                                "question__title_slug": "",
+                                "total_acs": 50,
+                                "total_submitted": 100
+                            },
+                            "status": null,
+                            "difficulty": { "level": 1 },
+                            "paid_only": false
                         }
                     ]
                 }"#;
@@ -974,6 +1003,8 @@ mod tests {
         assert_eq!(problems[0].title, "Two Sum");
         assert_eq!(problems[0].slug, "two-sum");
         assert_eq!(id_map.get(&100), Some(&1));
+        assert_eq!(id_map.get(&101), None);
+        assert_eq!(id_map.get(&102), None);
 
         let slug = client.get_slug_by_id_from_url(1, &url).await.unwrap();
         assert_eq!(slug, "two-sum");

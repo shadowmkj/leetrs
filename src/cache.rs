@@ -91,6 +91,11 @@ impl CacheService {
         fs::write(self.path(name), content).map_err(EngineError::Io)
     }
 
+    /// Atomically writes raw string content to a named cache file.
+    pub fn write_raw_atomic(&self, name: &str, content: &str) -> Result<()> {
+        write_atomic(&self.path(name), content.as_bytes()).map_err(EngineError::Io)
+    }
+
     /// Removes cache files (`data.json` and `user.json`) from disk.
     ///
     /// Returns the list of paths that were deleted. Missing files are safely ignored.
@@ -116,6 +121,41 @@ fn stream_error(e: serde_json::Error) -> EngineError {
     } else {
         EngineError::Parse(e)
     }
+}
+
+/// Atomically writes content to a file by writing to a temporary file in the same
+/// directory and renaming it into place.
+pub fn write_atomic(target: &std::path::Path, content: &[u8]) -> std::io::Result<()> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static ATOMIC_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    if let Some(parent) = target.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let parent = target.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let filename = target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("cache");
+    let count = ATOMIC_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp_path = parent.join(format!(
+        ".{}.tmp-{}-{}-{}",
+        filename,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+        count
+    ));
+
+    fs::write(&tmp_path, content)?;
+    if let Err(e) = fs::rename(&tmp_path, target) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(e);
+    }
+    Ok(())
 }
 
 impl Default for CacheService {
@@ -193,6 +233,25 @@ mod tests {
         // Second clean() call on already cleaned cache returns empty list without error
         let removed_again = cache.clean().unwrap();
         assert!(removed_again.is_empty());
+    }
+
+    #[test]
+    fn test_write_atomic_and_write_raw_atomic() {
+        let temp_dir = TempTestDir::new("leetrs-atomic-test");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
+        let target = temp_dir.path().join("atomic.txt");
+
+        // 1. Initial write
+        write_atomic(&target, b"initial content").unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "initial content");
+
+        // 2. Overwrite atomically
+        write_atomic(&target, b"updated content").unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "updated content");
+
+        // 3. Test CacheService write_raw_atomic
+        cache.write_raw_atomic("test.json", "{\"key\": 1}").unwrap();
+        assert_eq!(cache.read_raw("test.json").unwrap(), "{\"key\": 1}");
     }
 
     #[cfg(target_os = "linux")]
