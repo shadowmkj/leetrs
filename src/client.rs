@@ -279,7 +279,11 @@ impl LeetCodeClient {
     /// Fetch a specific problem's details and boilerplate using its numerical ID
     pub async fn get_question_by_id(&self, id: u64) -> Result<Question> {
         let url = "https://leetcode.com/api/problems/all/";
+        let slug = self.get_slug_by_id_from_url(id, url).await?;
+        self.get_question_by_slug(&slug).await
+    }
 
+    pub(crate) async fn get_slug_by_id_from_url(&self, id: u64, url: &str) -> Result<String> {
         let response = self.http_client.get(url).send().await?;
 
         if !response.status().is_success() {
@@ -303,11 +307,7 @@ impl LeetCodeClient {
             }
         }
 
-        let slug = target_slug
-            .ok_or_else(|| EngineError::GraphQL(format!("Problem with ID {} not found", id)))?;
-
-        // Chain directly into the slug fetcher, returning Result<Question>
-        self.get_question_by_slug(&slug).await
+        target_slug.ok_or_else(|| EngineError::GraphQL(format!("Problem with ID {} not found", id)))
     }
 
     /// Test raw code to a problem
@@ -580,7 +580,17 @@ impl LeetCodeClient {
         Vec<crate::models::ProblemSummary>,
         std::collections::HashMap<u64, u64>,
     )> {
-        let url = "https://leetcode.com/api/problems/all/";
+        self.get_problem_list_from_url("https://leetcode.com/api/problems/all/")
+            .await
+    }
+
+    pub(crate) async fn get_problem_list_from_url(
+        &self,
+        url: &str,
+    ) -> Result<(
+        Vec<crate::models::ProblemSummary>,
+        std::collections::HashMap<u64, u64>,
+    )> {
         log::debug!("Fetching problem list from {}...", url);
 
         let response = self.http_client.get(url).send().await?;
@@ -914,5 +924,61 @@ mod tests {
         assert_eq!(p2.status, None);
         assert_eq!(p2.difficulty.as_ref().unwrap().level, Some(2));
         assert_eq!(p2.paid_only, Some(true));
+    }
+
+    #[tokio::test]
+    async fn test_client_get_problem_list_and_slug_by_id_from_url() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                let _ = socket.read(&mut buf).await;
+                let body = r#"{
+                    "stat_status_pairs": [
+                        {
+                            "stat": {
+                                "question_id": 100,
+                                "frontend_question_id": 1,
+                                "question__title": "Two Sum",
+                                "question__title_slug": "two-sum",
+                                "total_acs": 500,
+                                "total_submitted": 1000
+                            },
+                            "status": "ac",
+                            "difficulty": { "level": 1 },
+                            "paid_only": false
+                        }
+                    ]
+                }"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            }
+        });
+
+        let creds = LeetCodeCredentials {
+            session_cookie: "test".to_string(),
+            csrf_token: "test".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).unwrap();
+        let url = format!("http://{}/api/problems/all/", addr);
+
+        let (problems, id_map) = client.get_problem_list_from_url(&url).await.unwrap();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].id, 1);
+        assert_eq!(problems[0].title, "Two Sum");
+        assert_eq!(problems[0].slug, "two-sum");
+        assert_eq!(id_map.get(&100), Some(&1));
+
+        let slug = client.get_slug_by_id_from_url(1, &url).await.unwrap();
+        assert_eq!(slug, "two-sum");
+
+        let err = client.get_slug_by_id_from_url(999, &url).await;
+        assert!(err.is_err());
     }
 }

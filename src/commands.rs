@@ -339,6 +339,32 @@ fn write_completion(
     Ok(())
 }
 
+/// Loads the problem list and user profile concurrently, displaying an initialization
+/// notice if launching with a cold cache.
+pub(crate) async fn load_tui_data<C: crate::client::LeetCodeApi + Clone + Send + Sync + 'static>(
+    picker: &Picker<C>,
+) -> std::result::Result<(Rc<[ProblemSummary]>, Option<crate::models::UserDetail>), String> {
+    let cache = CacheService::new();
+    let is_cold_cache = !cache.problems_path().exists();
+    if is_cold_cache {
+        eprintln!("⏳ Initializing problem list from LeetCode (this only happens once)...");
+    }
+
+    let (problems_res, user_data_res) =
+        tokio::join!(picker.list_problems(), picker.get_user_data());
+
+    let problems = match problems_res {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(format!("❌ Failed to fetch problems: {}", e));
+        }
+    };
+
+    let problems: Rc<[ProblemSummary]> = Rc::from(problems);
+    let user_data = user_data_res.ok();
+    Ok((problems, user_data))
+}
+
 /// Fetches the full problem list and user data, then launches the interactive TUI.
 pub async fn open_tui(language: &Option<Language>) {
     let creds = match LeetCodeCredentials::load() {
@@ -357,25 +383,14 @@ pub async fn open_tui(language: &Option<Language>) {
     };
     let picker = Picker::new(client);
 
-    let cache = CacheService::new();
-    let is_cold_cache = !cache.problems_path().exists();
-    if is_cold_cache {
-        eprintln!("⏳ Initializing problem list from LeetCode (this only happens once)...");
-    }
-
-    let (problems_res, user_data_res) =
-        tokio::join!(picker.list_problems(), picker.get_user_data());
-
-    let problems = match problems_res {
-        Ok(p) => p,
+    let (problems, user_data) = match load_tui_data(&picker).await {
+        Ok(data) => data,
         Err(e) => {
-            eprintln!("❌ Failed to fetch problems: {}", e);
+            eprintln!("{}", e);
             return;
         }
     };
 
-    let problems: Rc<[ProblemSummary]> = Rc::from(problems);
-    let user_data = user_data_res.ok();
     if let Err(e) = crate::tui::run_tui(Rc::clone(&problems), picker, user_data, language).await {
         eprintln!("❌ TUI error: {}", e);
     }
@@ -612,5 +627,111 @@ mod tests {
         assert!(res3.is_err());
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_load_tui_data_cold_and_warm() {
+        let cache = CacheService::new();
+        let data_path = cache.problems_path();
+        let user_path = cache.user_path();
+        let _ = fs::remove_file(&data_path);
+        let _ = fs::remove_file(&user_path);
+
+        #[derive(Clone)]
+        struct MockTuiClient;
+        impl crate::client::LeetCodeApi for MockTuiClient {
+            async fn get_question_by_slug(
+                &self,
+                _: &str,
+            ) -> crate::error::Result<crate::models::Question> {
+                unimplemented!()
+            }
+            async fn get_question_by_id(
+                &self,
+                _: u64,
+            ) -> crate::error::Result<crate::models::Question> {
+                unimplemented!()
+            }
+            async fn test_code(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> crate::error::Result<String> {
+                unimplemented!()
+            }
+            async fn submit_code(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+            ) -> crate::error::Result<u64> {
+                unimplemented!()
+            }
+            async fn check_test_submission(
+                &self,
+                _: String,
+            ) -> crate::error::Result<crate::models::TestSubmissionCheckResult> {
+                unimplemented!()
+            }
+            async fn check_submission(
+                &self,
+                _: u64,
+            ) -> crate::error::Result<crate::models::SubmissionCheckResult> {
+                unimplemented!()
+            }
+            async fn get_user_detail(&self) -> crate::error::Result<crate::models::UserDetail> {
+                Ok(crate::models::UserDetail {
+                    username: Some("test_tui".to_string()),
+                    is_premium: Some(false),
+                    is_verified: true,
+                })
+            }
+            async fn get_topics_question_list(
+                &self,
+            ) -> crate::error::Result<Vec<crate::models::QuestionTopics>> {
+                Ok(vec![])
+            }
+            async fn get_problem_list(
+                &self,
+            ) -> crate::error::Result<(
+                Vec<crate::models::ProblemSummary>,
+                std::collections::HashMap<u64, u64>,
+            )> {
+                Ok((
+                    vec![crate::models::ProblemSummary {
+                        id: 1,
+                        title: "Two Sum".to_string(),
+                        slug: "two-sum".to_string(),
+                        difficulty: 1,
+                        accepted: 10,
+                        submitted: 20,
+                        acceptance: 0.5,
+                        status: None,
+                        is_paid: false,
+                        topics: vec![],
+                    }],
+                    std::collections::HashMap::new(),
+                ))
+            }
+            async fn get_daily_challenge(
+                &self,
+            ) -> crate::error::Result<crate::models::ActiveDailyQuestion> {
+                unimplemented!()
+            }
+        }
+
+        let picker = Picker::new(MockTuiClient);
+        let res = load_tui_data(&picker).await;
+        assert!(res.is_ok());
+        let (problems, user) = res.unwrap();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(user.and_then(|u| u.username), Some("test_tui".to_string()));
+
+        let _ = fs::remove_file(&data_path);
+        let _ = fs::remove_file(&user_path);
     }
 }

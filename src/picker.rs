@@ -533,13 +533,23 @@ mod tests {
         }
 
         async fn get_user_detail(&self) -> crate::error::Result<crate::models::UserDetail> {
-            unimplemented!()
+            Ok(crate::models::UserDetail {
+                username: Some("test_user".to_string()),
+                is_premium: Some(true),
+                is_verified: true,
+            })
         }
 
         async fn get_topics_question_list(
             &self,
         ) -> crate::error::Result<Vec<crate::models::QuestionTopics>> {
-            unimplemented!()
+            Ok(vec![crate::models::QuestionTopics {
+                name: "Array".to_string(),
+                id: "array".to_string(),
+                slug: "array".to_string(),
+                translated_name: None,
+                question_ids: vec![100],
+            }])
         }
 
         async fn get_problem_list(
@@ -548,13 +558,42 @@ mod tests {
             Vec<crate::models::ProblemSummary>,
             std::collections::HashMap<u64, u64>,
         )> {
-            unimplemented!()
+            let mut id_map = std::collections::HashMap::new();
+            id_map.insert(100, 1);
+            let problems = vec![crate::models::ProblemSummary {
+                id: 1,
+                title: "Two Sum".to_string(),
+                slug: "two-sum".to_string(),
+                difficulty: 1,
+                accepted: 100,
+                submitted: 200,
+                acceptance: 0.5,
+                status: Some("ac".to_string()),
+                is_paid: false,
+                topics: vec![],
+            }];
+            Ok((problems, id_map))
         }
 
         async fn get_daily_challenge(
             &self,
         ) -> crate::error::Result<crate::models::ActiveDailyQuestion> {
             unimplemented!()
+        }
+    }
+
+    fn dummy_question() -> Question {
+        Question {
+            question_id: "1".to_string(),
+            question_frontend_id: "1".to_string(),
+            title_slug: "two-sum".to_string(),
+            title: "Two Sum".to_string(),
+            content: "<p>Content</p>".to_string(),
+            example_test_cases: "".to_string(),
+            code_snippets: vec![QuestionSnippet {
+                lang_slug: "rust".to_string(),
+                code: "// code".to_string(),
+            }],
         }
     }
 
@@ -757,5 +796,56 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(code_content, user_code);
         assert_eq!(desc_content, user_desc);
+    }
+
+    #[tokio::test]
+    async fn test_picker_get_user_data_cold_and_warm() {
+        let cache = CacheService::new();
+        let user_path = cache.user_path();
+        let _ = fs::remove_file(&user_path);
+
+        let picker = Picker::new(MockLeetCodeClient {
+            question: dummy_question(),
+        });
+
+        // 1. Cold cache fetch
+        let user = picker.get_user_data().await.unwrap();
+        assert_eq!(user.username.as_deref(), Some("test_user"));
+        assert!(user_path.exists());
+
+        // 2. Warm cache read
+        let cached_user = picker.get_user_data().await.unwrap();
+        assert_eq!(cached_user.username.as_deref(), Some("test_user"));
+
+        let _ = fs::remove_file(&user_path);
+    }
+
+    #[tokio::test]
+    async fn test_picker_list_problems_cold_and_warm() {
+        let cache = CacheService::new();
+        let data_path = cache.problems_path();
+        let user_path = cache.user_path();
+        let _ = fs::remove_file(&data_path);
+        let _ = fs::remove_file(&user_path);
+
+        let picker = Picker::new(MockLeetCodeClient {
+            question: dummy_question(),
+        });
+
+        // 1. Cold cache fetch
+        let problems = picker.list_problems().await.unwrap();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].id, 1);
+        assert_eq!(problems[0].topics, vec!["Array".to_string()]);
+        assert!(data_path.exists());
+
+        // 2. Warm cache read
+        let cached_problems = picker.list_problems().await.unwrap();
+        assert_eq!(cached_problems.len(), 1);
+        assert_eq!(cached_problems[0].id, 1);
+        assert_eq!(cached_problems[0].topics, vec!["Array".to_string()]);
+
+        let _ = fs::remove_file(&data_path);
+        let _ = fs::remove_file(&user_path);
     }
 }
