@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::config::solutions_dir;
 
 use crate::{
-    client::LeetCodeClient,
+    client::{LeetCodeApi, LeetCodeClient},
     error::{EngineError, Result},
     models::{Language, Question, SubmissionCheckResult, TestSubmissionCheckResult},
 };
@@ -134,12 +134,12 @@ impl SubmissionResult {
 
 /// Encapsulates the file-read → slug-resolve → API-call flow for both
 /// `submit` and `test` operations.
-pub struct SubmissionService {
-    client: LeetCodeClient,
+pub struct SubmissionService<C = LeetCodeClient> {
+    client: C,
 }
 
-impl SubmissionService {
-    pub fn new(client: LeetCodeClient) -> Self {
+impl<C: LeetCodeApi> SubmissionService<C> {
+    pub fn new(client: C) -> Self {
         Self { client }
     }
 
