@@ -357,7 +357,16 @@ pub async fn open_tui(language: &Option<Language>) {
     };
     let picker = Picker::new(client);
 
-    let problems = match picker.list_problems().await {
+    let cache = CacheService::new();
+    let is_cold_cache = !cache.problems_path().exists();
+    if is_cold_cache {
+        eprintln!("⏳ Initializing problem list from LeetCode (this only happens once)...");
+    }
+
+    let (problems_res, user_data_res) =
+        tokio::join!(picker.list_problems(), picker.get_user_data());
+
+    let problems = match problems_res {
         Ok(p) => p,
         Err(e) => {
             eprintln!("❌ Failed to fetch problems: {}", e);
@@ -366,7 +375,7 @@ pub async fn open_tui(language: &Option<Language>) {
     };
 
     let problems: Rc<[ProblemSummary]> = Rc::from(problems);
-    let user_data = picker.get_user_data().await.ok();
+    let user_data = user_data_res.ok();
     if let Err(e) = crate::tui::run_tui(Rc::clone(&problems), picker, user_data, language).await {
         eprintln!("❌ TUI error: {}", e);
     }

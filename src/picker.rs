@@ -194,12 +194,12 @@ impl Picker {
     pub async fn get_user_data(&self) -> crate::error::Result<UserDetail> {
         let cache = CacheService::new();
         let user_path = cache.user_path();
-        let data = match fs::read_to_string(&user_path) {
+        match fs::read_to_string(&user_path) {
             Ok(v) => {
                 let client = self.client.clone();
                 let user_path_bg = user_path.clone();
                 tokio::spawn(async move {
-                    let result: Result<(), Box<dyn std::error::Error>> = async {
+                    let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
                         let user_detail = client.get_user_detail().await?;
                         let data = serde_json::to_string(&user_detail)?;
                         let _ = fs::write(&user_path_bg, &data);
@@ -209,24 +209,26 @@ impl Picker {
 
                     let _ = result;
                 });
-                v
+
+                let user_detail: UserDetail = serde_json::from_str(&v).map_err(|e| {
+                    eprintln!("Failed to parse user details: {}", e);
+                    eprintln!("Try running `leetrs tui` again to refresh the cache.");
+                    if let Err(err) = fs::remove_file(&user_path) {
+                        eprintln!("Failed to remove corrupted cache file: {}", err);
+                    }
+                    e
+                })?;
+                Ok(user_detail)
             }
             Err(_) => {
+                log::debug!("Cache miss: fetching user profile from LeetCode...");
                 let user_detail = self.client.get_user_detail().await?;
-                let data = serde_json::to_string(&user_detail)?;
-                let _ = fs::write(&user_path, &data);
-                data
+                if let Ok(data) = serde_json::to_string(&user_detail) {
+                    let _ = fs::write(&user_path, &data);
+                }
+                Ok(user_detail)
             }
-        };
-        let user_detail: UserDetail = serde_json::from_str(&data).map_err(|e| {
-            eprintln!("Failed to parse user details: {}", e);
-            eprintln!("Try running `leetrs tui` again to refresh the cache.");
-            if let Err(err) = fs::remove_file(&user_path) {
-                eprintln!("Failed to remove corrupted cache file: {}", err);
-            }
-            e
-        })?;
-        Ok(user_detail)
+        }
     }
 
     /// Returns the full problem list, enriched with topic tags.
@@ -240,7 +242,7 @@ impl Picker {
         let cache = CacheService::new();
         let data_path = cache.problems_path();
         let user_path = cache.user_path();
-        let data = match fs::read_to_string(&data_path) {
+        match fs::read_to_string(&data_path) {
             Ok(v) => {
                 // Fetch data in the background and update data.json for next time
                 let client_clone = self.client.clone();
@@ -248,11 +250,16 @@ impl Picker {
                 let user_path_bg = user_path.clone();
                 tokio::spawn(async move {
                     let res: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
-                        let user_detail = client_clone.get_user_detail().await?;
-                        let data = serde_json::to_string(&user_detail)?;
-                        let _ = fs::write(&user_path_bg, data);
-                        let (mut problems, id_map) = client_clone.get_problem_list().await?;
-                        let question_tags = client_clone.get_topics_question_list().await?;
+                        let user_res = client_clone.get_user_detail();
+                        let problems_res = client_clone.get_problem_list();
+                        let tags_res = client_clone.get_topics_question_list();
+
+                        let (user_detail, (mut problems, id_map), question_tags) =
+                            tokio::try_join!(user_res, problems_res, tags_res)?;
+
+                        let user_data = serde_json::to_string(&user_detail)?;
+                        let _ = fs::write(&user_path_bg, user_data);
+
                         attach_topics(&mut problems, question_tags, &id_map);
                         let data = serde_json::to_string(&problems)?;
                         let _ = fs::write(&data_path_bg, data);
@@ -262,26 +269,30 @@ impl Picker {
 
                     let _ = res;
                 });
-                v
+
+                let problems: Vec<ProblemSummary> = serde_json::from_str(&v).map_err(|e| {
+                    eprintln!("Failed to parse problem list: {}", e);
+                    eprintln!("Try running `leetrs tui` again to refresh the cache.");
+                    if let Err(err) = fs::remove_file(&data_path) {
+                        eprintln!("Failed to remove corrupted cache file: {}", err);
+                    }
+                    e
+                })?;
+                Ok(problems)
             }
             Err(_) => {
-                let (mut problems, id_map) = self.client.get_problem_list().await?;
-                let question_tags = self.client.get_topics_question_list().await?;
+                log::debug!("Cache miss: fetching problem list and topic tags concurrently...");
+                let ((mut problems, id_map), question_tags) = tokio::try_join!(
+                    self.client.get_problem_list(),
+                    self.client.get_topics_question_list()
+                )?;
                 attach_topics(&mut problems, question_tags, &id_map);
-                let data = serde_json::to_string(&problems)?;
-                let _ = fs::write(&data_path, &data);
-                data
+                if let Ok(data) = serde_json::to_string(&problems) {
+                    let _ = fs::write(&data_path, &data);
+                }
+                Ok(problems)
             }
-        };
-        let problems: Vec<ProblemSummary> = serde_json::from_str(&data).map_err(|e| {
-            eprintln!("Failed to parse problem list: {}", e);
-            eprintln!("Try running `leetrs tui` again to refresh the cache.");
-            if let Err(err) = fs::remove_file(&data_path) {
-                eprintln!("Failed to remove corrupted cache file: {}", err);
-            }
-            e
-        })?;
-        Ok(problems)
+        }
     }
 }
 
