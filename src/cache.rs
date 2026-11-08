@@ -16,6 +16,7 @@ use std::{
 ///
 /// All cache files live under the directory returned by
 /// `ProjectDirs::from("com", "shadowmkj", "leetrs").data_dir()`.
+#[derive(Clone, Debug)]
 pub struct CacheService {
     data_dir: PathBuf,
 }
@@ -26,7 +27,11 @@ impl CacheService {
     pub fn new() -> Self {
         let project_dirs = ProjectDirs::from("com", "shadowmkj", "leetrs")
             .expect("Failed to resolve OS data directory");
-        let data_dir = project_dirs.data_dir().to_path_buf();
+        Self::with_dir(project_dirs.data_dir().to_path_buf())
+    }
+
+    /// Creates a [`CacheService`] with an explicit data directory path.
+    pub fn with_dir(data_dir: PathBuf) -> Self {
         if let Err(e) = fs::create_dir_all(&data_dir) {
             eprintln!("❌ Failed to create data directory: {}", e);
         }
@@ -120,16 +125,48 @@ impl Default for CacheService {
 }
 
 #[cfg(test)]
+pub(crate) struct TempTestDir(pub PathBuf);
+
+#[cfg(test)]
+impl TempTestDir {
+    pub fn new(prefix: &str) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "{}-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos(),
+            id
+        ));
+        let _ = fs::create_dir_all(&path);
+        Self(path)
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+#[cfg(test)]
+impl Drop for TempTestDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn read_and_write_round_trip_through_the_file() {
-        let data_dir = std::env::temp_dir().join(format!("leetrs-cache-{}", std::process::id()));
-        fs::create_dir_all(&data_dir).unwrap();
-        let cache = CacheService {
-            data_dir: data_dir.clone(),
-        };
+        let temp_dir = TempTestDir::new("leetrs-cache");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
 
         assert!(cache.read::<Vec<u32>>("missing.json").unwrap().is_none());
 
@@ -139,7 +176,7 @@ mod tests {
             Some(vec![1, 2, 3])
         );
 
-        fs::write(data_dir.join("corrupt.json"), "not json").unwrap();
+        fs::write(temp_dir.path().join("corrupt.json"), "not json").unwrap();
         assert!(cache.read::<Vec<u32>>("corrupt.json").is_err());
 
         // Test clean() removes problems_path and user_path
@@ -156,8 +193,6 @@ mod tests {
         // Second clean() call on already cleaned cache returns empty list without error
         let removed_again = cache.clean().unwrap();
         assert!(removed_again.is_empty());
-
-        fs::remove_dir_all(data_dir).unwrap();
     }
 
     #[cfg(target_os = "linux")]

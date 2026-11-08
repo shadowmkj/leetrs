@@ -22,11 +22,19 @@ use std::fs;
 #[derive(Clone)]
 pub struct Picker<C = LeetCodeClient> {
     pub client: C,
+    pub cache: CacheService,
 }
 
 impl<C> Picker<C> {
     pub fn new(client: C) -> Self {
-        Picker { client }
+        Picker {
+            client,
+            cache: CacheService::new(),
+        }
+    }
+
+    pub fn with_cache(client: C, cache: CacheService) -> Self {
+        Picker { client, cache }
     }
 }
 
@@ -69,8 +77,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
         let dir = solutions_dir();
 
         let cached_slug = if let Identifier::Number(num) = identifier {
-            let cache = CacheService::new();
-            if let Ok(Some(problems)) = cache.read::<Vec<ProblemSummary>>("data.json") {
+            if let Ok(Some(problems)) = self.cache.read::<Vec<ProblemSummary>>("data.json") {
                 problems.into_iter().find(|p| p.id == *num).map(|p| p.slug)
             } else {
                 None
@@ -215,8 +222,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     ///    fetches the latest data from the API and overwrites the file.
     /// 3. If not found, block on the API fetch, write the file, then return.
     pub async fn get_user_data(&self) -> crate::error::Result<UserDetail> {
-        let cache = CacheService::new();
-        let user_path = cache.user_path();
+        let user_path = self.cache.user_path();
         match fs::read_to_string(&user_path) {
             Ok(v) => {
                 let client = self.client.clone();
@@ -262,9 +268,8 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     ///    fetches a fresh list (problems + tags) and overwrites the cache.
     /// 3. If not found, block on both API calls, write the cache, then return.
     pub async fn list_problems(&self) -> crate::error::Result<Vec<ProblemSummary>> {
-        let cache = CacheService::new();
-        let data_path = cache.problems_path();
-        let user_path = cache.user_path();
+        let data_path = self.cache.problems_path();
+        let user_path = self.cache.user_path();
         match fs::read_to_string(&data_path) {
             Ok(v) => {
                 // Fetch data in the background and update data.json for next time
@@ -699,7 +704,8 @@ mod tests {
         fs::write(desc_file, user_desc).unwrap();
 
         // Write cached problem entry
-        let cache = CacheService::new();
+        let temp_dir = crate::cache::TempTestDir::new("leetrs-fast-path");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
         let cached_problems = vec![ProblemSummary {
             id: 7777,
             title: "Test Fast Path Problem".to_string(),
@@ -781,7 +787,7 @@ mod tests {
             }
         }
 
-        let picker = Picker::new(PanickingMockClient);
+        let picker = Picker::with_cache(PanickingMockClient, cache);
         let res = picker
             .pick(&Identifier::Number(7777), &Some(Language::Rust))
             .await;
@@ -800,13 +806,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_picker_get_user_data_cold_and_warm() {
-        let cache = CacheService::new();
+        let temp_dir = crate::cache::TempTestDir::new("leetrs-picker-user");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
         let user_path = cache.user_path();
-        let _ = fs::remove_file(&user_path);
 
-        let picker = Picker::new(MockLeetCodeClient {
-            question: dummy_question(),
-        });
+        let picker = Picker::with_cache(
+            MockLeetCodeClient {
+                question: dummy_question(),
+            },
+            cache,
+        );
 
         // 1. Cold cache fetch
         let user = picker.get_user_data().await.unwrap();
@@ -817,20 +826,22 @@ mod tests {
         let cached_user = picker.get_user_data().await.unwrap();
         assert_eq!(cached_user.username.as_deref(), Some("test_user"));
 
-        let _ = fs::remove_file(&user_path);
+        // Allow background refresh task spawned during warm cache read to run
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 
     #[tokio::test]
     async fn test_picker_list_problems_cold_and_warm() {
-        let cache = CacheService::new();
+        let temp_dir = crate::cache::TempTestDir::new("leetrs-picker-problems");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
         let data_path = cache.problems_path();
-        let user_path = cache.user_path();
-        let _ = fs::remove_file(&data_path);
-        let _ = fs::remove_file(&user_path);
 
-        let picker = Picker::new(MockLeetCodeClient {
-            question: dummy_question(),
-        });
+        let picker = Picker::with_cache(
+            MockLeetCodeClient {
+                question: dummy_question(),
+            },
+            cache,
+        );
 
         // 1. Cold cache fetch
         let problems = picker.list_problems().await.unwrap();
@@ -845,7 +856,7 @@ mod tests {
         assert_eq!(cached_problems[0].id, 1);
         assert_eq!(cached_problems[0].topics, vec!["Array".to_string()]);
 
-        let _ = fs::remove_file(&data_path);
-        let _ = fs::remove_file(&user_path);
+        // Allow background refresh task spawned during warm cache read to run
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }

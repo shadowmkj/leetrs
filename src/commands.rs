@@ -344,8 +344,7 @@ fn write_completion(
 pub(crate) async fn load_tui_data<C: crate::client::LeetCodeApi + Clone + Send + Sync + 'static>(
     picker: &Picker<C>,
 ) -> std::result::Result<(Rc<[ProblemSummary]>, Option<crate::models::UserDetail>), String> {
-    let cache = CacheService::new();
-    let is_cold_cache = !cache.problems_path().exists();
+    let is_cold_cache = !picker.cache.problems_path().exists();
     if is_cold_cache {
         eprintln!("⏳ Initializing problem list from LeetCode (this only happens once)...");
     }
@@ -599,43 +598,39 @@ mod tests {
 
     #[test]
     fn test_handle_clean_internal_with_files_and_empty() {
-        let temp_dir =
-            std::env::temp_dir().join(format!("leetrs-clean-test-{}", std::process::id()));
-        let _ = fs::create_dir_all(&temp_dir);
+        use crate::cache::TempTestDir;
 
-        // CacheService has a private data_dir, but we can test via temp dir
-        // Let's create dummy files to test deletion reporting
-        let dummy_creds_path = temp_dir.join("credentials.json");
+        let temp_dir = TempTestDir::new("leetrs-clean-test");
+        let dummy_creds_path = temp_dir.path().join("credentials.json");
         fs::write(&dummy_creds_path, "{}").unwrap();
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
 
         // 1. Test when delete_creds returns Some(path)
-        let res =
-            handle_clean_internal(&CacheService::new(), || Ok(Some(dummy_creds_path.clone())));
+        let res = handle_clean_internal(&cache, || Ok(Some(dummy_creds_path.clone())));
         assert!(res.is_ok());
 
         // 2. Test when delete_creds returns None
-        let res2 = handle_clean_internal(&CacheService::new(), || Ok(None));
+        let res2 = handle_clean_internal(&cache, || Ok(None));
         assert!(res2.is_ok());
 
         // 3. Test when delete_creds returns Err
-        let res3 = handle_clean_internal(&CacheService::new(), || {
+        let res3 = handle_clean_internal(&cache, || {
             Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "denied",
             ))
         });
         assert!(res3.is_err());
-
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]
     async fn test_load_tui_data_cold_and_warm() {
-        let cache = CacheService::new();
+        use crate::cache::TempTestDir;
+
+        let temp_dir = TempTestDir::new("leetrs-tui-test");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
         let data_path = cache.problems_path();
         let user_path = cache.user_path();
-        let _ = fs::remove_file(&data_path);
-        let _ = fs::remove_file(&user_path);
 
         #[derive(Clone)]
         struct MockTuiClient;
@@ -724,14 +719,27 @@ mod tests {
             }
         }
 
-        let picker = Picker::new(MockTuiClient);
+        let picker = Picker::with_cache(MockTuiClient, cache);
         let res = load_tui_data(&picker).await;
         assert!(res.is_ok());
         let (problems, user) = res.unwrap();
         assert_eq!(problems.len(), 1);
         assert_eq!(user.and_then(|u| u.username), Some("test_tui".to_string()));
 
-        let _ = fs::remove_file(&data_path);
-        let _ = fs::remove_file(&user_path);
+        // Warm cache test: both problem data and user profile exist in isolated directory
+        assert!(data_path.exists());
+        assert!(user_path.exists());
+
+        let res_warm = load_tui_data(&picker).await;
+        assert!(res_warm.is_ok());
+        let (problems_warm, user_warm) = res_warm.unwrap();
+        assert_eq!(problems_warm.len(), 1);
+        assert_eq!(
+            user_warm.and_then(|u| u.username),
+            Some("test_tui".to_string())
+        );
+
+        // Allow background refresh tasks spawned during warm cache read to run
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }
