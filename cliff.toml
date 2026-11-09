@@ -30,7 +30,7 @@ body = """
 {% if github.contributors | filter(attribute="is_first_time", value=true) | length > 0 %}
 ### 👥 New Contributors
 {% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
-- [`@{{ contributor.username }}`](https://github.com/{{ contributor.username }}) made their first contribution{% if contributor.pr_number %} in [#{{ contributor.pr_number }}](https://github.com/shadowmkj/leetrs/pull/{{ contributor.pr_number }}){% endif %}
+- [`@{{ contributor.username }}`](https://github.com/{{ contributor.username }}) made their first contribution{% if contributor.pr_number %} in [#{{ contributor.pr_numbers | first }}](https://github.com/shadowmkj/leetrs/pull/{{ contributor.pr_numbers | first }}){% endif %}
 {% endfor %}
 {% endif %}
 """
@@ -46,7 +46,7 @@ postprocessors = []
 # See https://www.conventionalcommits.org
 conventional_commits = true
 # Exclude commits that do not match the conventional commits specification.
-filter_unconventional = false
+filter_unconventional = true
 # Require all commits to be conventional.
 # Takes precedence over filter_unconventional.
 require_conventional = false
