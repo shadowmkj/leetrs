@@ -1,3 +1,36 @@
+## [v1.2.2](https://github.com/shadowmkj/leetrs/releases/tag/v1.2.2) - 2026-11-09
+
+### 🚀 Features
+
+- *(cli)* Add custom test case input to leetrs test ([#66](https://github.com/shadowmkj/leetrs/pull/66)) - ([d649659](https://github.com/shadowmkj/leetrs/commit/d649659a6f76bdd813b1202dbf28aa476ea9e56c)) (from [`@costajohnt`](https://github.com/costajohnt))
+- *(cli)* Add leetrs daily command for the Problem of the Day ([#69](https://github.com/shadowmkj/leetrs/pull/69)) - ([d0f957e](https://github.com/shadowmkj/leetrs/commit/d0f957ee497c7067c0d01809af1649129259ced5)) (from [`@costajohnt`](https://github.com/costajohnt))
+- *(build)* Embed git commit metadata into build version - ([e6f55f0](https://github.com/shadowmkj/leetrs/commit/e6f55f05919f788bb97b7f560f6976b6ca0c492b)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(cli)* Add browser flag to open problems in web browser - ([f0c7d5a](https://github.com/shadowmkj/leetrs/commit/f0c7d5a40a61c9339a7bb0d3a4bc82166ea4fb77)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(config)* Support solutions_dir in config.toml ([#68](https://github.com/shadowmkj/leetrs/pull/68)) - ([6dcb560](https://github.com/shadowmkj/leetrs/commit/6dcb560102161490c9ada9d550019f1e43867939)) (from [`@costajohnt`](https://github.com/costajohnt))
+- *(cli)* Add clean and reset commands to purge local cache and credentials - ([2114e6d](https://github.com/shadowmkj/leetrs/commit/2114e6d1ee74f6a22f4c2443a3203f6a3866a9e5)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+
+### 🐛 Bug Fixes
+
+- *(completion)* Generate Elvish and PowerShell scripts instead of panicking ([#67](https://github.com/shadowmkj/leetrs/pull/67)) - ([8284786](https://github.com/shadowmkj/leetrs/commit/82847868b15e067eb3b710802610c1395585fa09)) (from [`@saimskywalker`](https://github.com/saimskywalker))
+- *(client)* Add retry limits and terminal failure detection to polling loop ([#75](https://github.com/shadowmkj/leetrs/pull/75)) - ([9159cce](https://github.com/shadowmkj/leetrs/commit/9159cce4bee4b4af6cb9271bf5323e667008ed7b)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(picker)* Do not overwrite existing solution files when picking by ID or slug - ([261f884](https://github.com/shadowmkj/leetrs/commit/261f88444fc343b97ba4f1ce1728feaa900a61c9)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+
+### ⚡️ Performance
+
+- *(cache)* Stream JSON in CacheService read and write ([#70](https://github.com/shadowmkj/leetrs/pull/70)) - ([f383684](https://github.com/shadowmkj/leetrs/commit/f383684a5f27b039653fb5e1a7bcbcb4017ac5cb)) (from [`@costajohnt`](https://github.com/costajohnt))
+
+### ⚙️ Misc
+
+- Update cli reference documentation and README - ([73c722d](https://github.com/shadowmkj/leetrs/commit/73c722d0001aa3f919b913aa8dd54dc3a310a02e)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- Update git-cliff configuration for PR numbers and filtering - ([225fcd2](https://github.com/shadowmkj/leetrs/commit/225fcd2c612a74e6eee6376c8a95aa0daae36730)) (from [`@shadowmkj`](https://github.com/shadowmkj))
+- *(release)* Bump version to 1.2.2 - ([e24d7fb](https://github.com/shadowmkj/leetrs/commit/e24d7fb5a812caa46e1211518c7f1f64d4be6d9e)) (by Milan Pramod)
+
+### 👥 New Contributors
+
+- [`@costajohnt`](https://github.com/costajohnt) made their first contribution in [#66](https://github.com/shadowmkj/leetrs/pull/66)
+
+- [`@saimskywalker`](https://github.com/saimskywalker) made their first contribution in [#67](https://github.com/shadowmkj/leetrs/pull/67)
+
 ## [v1.2.1](https://github.com/shadowmkj/leetrs/releases/tag/v1.2.1) - 2026-10-28
 
 ### 🚀 Features
