@@ -22,11 +22,19 @@ use std::fs;
 #[derive(Clone)]
 pub struct Picker<C = LeetCodeClient> {
     pub client: C,
+    cache: CacheService,
 }
 
 impl<C> Picker<C> {
     pub fn new(client: C) -> Self {
-        Picker { client }
+        Picker {
+            client,
+            cache: CacheService::new(),
+        }
+    }
+
+    pub fn with_cache(client: C, cache: CacheService) -> Self {
+        Picker { client, cache }
     }
 }
 
@@ -69,8 +77,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
         let dir = solutions_dir();
 
         let cached_slug = if let Identifier::Number(num) = identifier {
-            let cache = CacheService::new();
-            if let Ok(Some(problems)) = cache.read::<Vec<ProblemSummary>>("data.json") {
+            if let Ok(Some(problems)) = self.cache.read::<Vec<ProblemSummary>>("data.json") {
                 problems.into_iter().find(|p| p.id == *num).map(|p| p.slug)
             } else {
                 None
@@ -215,8 +222,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     ///    fetches the latest data from the API and overwrites the file.
     /// 3. If not found, block on the API fetch, write the file, then return.
     pub async fn get_user_data(&self) -> crate::error::Result<UserDetail> {
-        let cache = CacheService::new();
-        let user_path = cache.user_path();
+        let user_path = self.cache.user_path();
         let data = match fs::read_to_string(&user_path) {
             Ok(v) => {
                 let client = self.client.clone();
@@ -260,9 +266,8 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     ///    fetches a fresh list (problems + tags) and overwrites the cache.
     /// 3. If not found, block on both API calls, write the cache, then return.
     pub async fn list_problems(&self) -> crate::error::Result<Vec<ProblemSummary>> {
-        let cache = CacheService::new();
-        let data_path = cache.problems_path();
-        let user_path = cache.user_path();
+        let data_path = self.cache.problems_path();
+        let user_path = self.cache.user_path();
         let data = match fs::read_to_string(&data_path) {
             Ok(v) => {
                 // Fetch data in the background and update data.json for next time
@@ -638,6 +643,11 @@ mod tests {
 
     #[tokio::test]
     async fn pick_by_id_fast_path_when_in_cache_skips_network() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("leetrs-picker-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&temp_dir);
+        let cache = CacheService::with_dir(temp_dir.clone());
+
         let code_file = "test_fast_path_problem.rs";
         let desc_file = "test_fast_path_problem.md";
         let _ = fs::remove_file(code_file);
@@ -649,7 +659,6 @@ mod tests {
         fs::write(desc_file, user_desc).unwrap();
 
         // Write cached problem entry
-        let cache = CacheService::new();
         let cached_problems = vec![ProblemSummary {
             id: 7777,
             title: "Test Fast Path Problem".to_string(),
@@ -731,7 +740,7 @@ mod tests {
             }
         }
 
-        let picker = Picker::new(PanickingMockClient);
+        let picker = Picker::with_cache(PanickingMockClient, cache);
         let res = picker
             .pick(&Identifier::Number(7777), &Some(Language::Rust))
             .await;
@@ -742,6 +751,7 @@ mod tests {
         // Clean up
         let _ = fs::remove_file(code_file);
         let _ = fs::remove_file(desc_file);
+        let _ = fs::remove_dir_all(&temp_dir);
 
         assert!(res.is_ok());
         assert_eq!(code_content, user_code);

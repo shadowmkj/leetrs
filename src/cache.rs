@@ -16,6 +16,7 @@ use std::{
 ///
 /// All cache files live under the directory returned by
 /// `ProjectDirs::from("com", "shadowmkj", "leetrs").data_dir()`.
+#[derive(Clone, Debug)]
 pub struct CacheService {
     data_dir: PathBuf,
 }
@@ -27,6 +28,14 @@ impl CacheService {
         let project_dirs = ProjectDirs::from("com", "shadowmkj", "leetrs")
             .expect("Failed to resolve OS data directory");
         let data_dir = project_dirs.data_dir().to_path_buf();
+        if let Err(e) = fs::create_dir_all(&data_dir) {
+            eprintln!("❌ Failed to create data directory: {}", e);
+        }
+        Self { data_dir }
+    }
+
+    /// Creates a new [`CacheService`] targeting an explicit data directory.
+    pub fn with_dir(data_dir: PathBuf) -> Self {
         if let Err(e) = fs::create_dir_all(&data_dir) {
             eprintln!("❌ Failed to create data directory: {}", e);
         }
@@ -126,10 +135,7 @@ mod tests {
     #[test]
     fn read_and_write_round_trip_through_the_file() {
         let data_dir = std::env::temp_dir().join(format!("leetrs-cache-{}", std::process::id()));
-        fs::create_dir_all(&data_dir).unwrap();
-        let cache = CacheService {
-            data_dir: data_dir.clone(),
-        };
+        let cache = CacheService::with_dir(data_dir.clone());
 
         assert!(cache.read::<Vec<u32>>("missing.json").unwrap().is_none());
 

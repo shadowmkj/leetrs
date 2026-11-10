@@ -615,22 +615,20 @@ mod tests {
             std::env::temp_dir().join(format!("leetrs-clean-test-{}", std::process::id()));
         let _ = fs::create_dir_all(&temp_dir);
 
-        // CacheService has a private data_dir, but we can test via temp dir
-        // Let's create dummy files to test deletion reporting
+        let cache = CacheService::with_dir(temp_dir.join("cache"));
         let dummy_creds_path = temp_dir.join("credentials.json");
         fs::write(&dummy_creds_path, "{}").unwrap();
 
         // 1. Test when delete_creds returns Some(path)
-        let res =
-            handle_clean_internal(&CacheService::new(), || Ok(Some(dummy_creds_path.clone())));
+        let res = handle_clean_internal(&cache, || Ok(Some(dummy_creds_path.clone())));
         assert!(res.is_ok());
 
         // 2. Test when delete_creds returns None
-        let res2 = handle_clean_internal(&CacheService::new(), || Ok(None));
+        let res2 = handle_clean_internal(&cache, || Ok(None));
         assert!(res2.is_ok());
 
         // 3. Test when delete_creds returns Err
-        let res3 = handle_clean_internal(&CacheService::new(), || {
+        let res3 = handle_clean_internal(&cache, || {
             Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "denied",
