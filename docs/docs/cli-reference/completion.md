@@ -6,7 +6,8 @@ sidebar_position: 7
 
 # 🐚 `leetrs completion`
 
-Generates shell autocomplete scripts for `bash`, `zsh`, `fish`, `elvish`, and `powershell`.
+Generates shell autocomplete scripts for `bash`, `zsh`, `fish`, `elvish`, `powershell`, and
+`nushell`.
 
 ---
 
@@ -20,9 +21,9 @@ leetrs completion <SHELL>
 
 ## Arguments
 
-| Argument | Supported Values | Description |
-|---|---|---|
-| `<SHELL>` | `bash`, `zsh`, `fish`, `elvish`, `powershell` | Target shell environment |
+| Argument  | Supported Values                                                   | Description              |
+| --------- | ------------------------------------------------------------------ | ------------------------ |
+| `<SHELL>` | `bash`, `zsh`, `fish`, `elvish`, `powershell`, `nushell` (or `nu`) | Target shell environment |
 
 ---
 
@@ -68,3 +69,21 @@ Add completion script to your PowerShell profile (`$PROFILE`):
 ```powershell
 leetrs completion powershell | Out-String | Invoke-Expression
 ```
+
+### Nushell Setup
+
+Save completion script to your Nushell completions directory:
+
+```nushell
+leetrs completion nushell | save -f ~/.config/nushell/completions/leetrs.nu
+```
+
+And add to your `config.nu`:
+
+```nushell
+source ~/.config/nushell/completions/leetrs.nu
+```
+
+:::note
+If you prefer `use` instead of `source`, make sure to include a trailing `*` (`use ~/.config/nushell/completions/leetrs.nu *`). Without `*`, Nushell treats the script as a module and namespaces the definitions under the file stem, causing an extra command prefix (`leetrs leetrs`).
+:::

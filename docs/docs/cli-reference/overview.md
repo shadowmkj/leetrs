@@ -21,7 +21,7 @@ sidebar_position: 1
 | [`daily`](./daily.md)            | `[language]` `[-p, --preview]` `[-b, --browser]`                | Pick today's LeetCode Problem of the Day                                                                         |
 | [`test`](./test-and-submit.md)   | `<file>` `[-c, --cases <input> \| --cases-file <path>]`         | Test local solution against sample test cases without official submission                                        |
 | [`submit`](./test-and-submit.md) | `<file>`                                                        | Submit local solution to LeetCode for full judging and statistics                                                |
-| [`completion`](./completion.md)  | `<shell>`                                                       | Generate shell autocomplete scripts (`bash`, `zsh`, `fish`, `elvish`, `powershell`)                              |
+| [`completion`](./completion.md)  | `<shell>`                                                       | Generate shell autocomplete scripts (`bash`, `zsh`, `fish`, `elvish`, `powershell`, `nushell`)                    |
 | [`clean`](./clean.md)            | —                                                               | Invalidate and purge local cache (`data.json`, `user.json`) and stored credentials (`credentials.json`)          |
 
 ---

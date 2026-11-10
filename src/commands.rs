@@ -7,10 +7,10 @@ use std::{fs, io, path::Path, process::Command, rc::Rc};
 
 use clap::CommandFactory;
 use clap_complete::{
-    Shell,
     aot::{Bash, Elvish, Fish, PowerShell, Zsh},
     generate,
 };
+use clap_complete_nushell::Nushell;
 use dialoguer::{Select, theme::ColorfulTheme};
 
 use crate::{
@@ -314,15 +314,38 @@ pub async fn handle_submit(file: &str) -> std::result::Result<(), String> {
     Ok(())
 }
 
+/// Shells supported for autocomplete script generation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum Shell {
+    Bash,
+    Elvish,
+    Fish,
+    #[value(alias = "nu")]
+    Nushell,
+    PowerShell,
+    Zsh,
+}
+
+impl std::fmt::Display for Shell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bash => write!(f, "bash"),
+            Self::Elvish => write!(f, "elvish"),
+            Self::Fish => write!(f, "fish"),
+            Self::Nushell => write!(f, "nushell"),
+            Self::PowerShell => write!(f, "powershell"),
+            Self::Zsh => write!(f, "zsh"),
+        }
+    }
+}
+
 /// Writes shell completion script for `shell` to stdout.
 pub fn handle_completion<C: CommandFactory>(shell: &Shell) -> std::result::Result<(), String> {
     write_completion(shell, &mut C::command(), &mut io::stdout())
 }
 
 /// Writes the completion script of `cmd` for `shell` to `out`.
-///
-/// Returns an error for shells that `clap_complete` may add in the future
-/// (`Shell` is `#[non_exhaustive]`) instead of panicking.
 fn write_completion(
     shell: &Shell,
     cmd: &mut clap::Command,
@@ -334,7 +357,7 @@ fn write_completion(
         Shell::Fish => generate(Fish, cmd, "leetrs", out),
         Shell::Elvish => generate(Elvish, cmd, "leetrs", out),
         Shell::PowerShell => generate(PowerShell, cmd, "leetrs", out),
-        other => return Err(format!("Completion for shell '{other}' is not supported.")),
+        Shell::Nushell => generate(Nushell, cmd, "leetrs", out),
     }
     Ok(())
 }
@@ -552,6 +575,19 @@ mod tests {
             assert!(script.contains("leetrs"), "{shell} script names the binary");
             assert!(script.contains("verbose"), "{shell} script lists the flags");
         }
+    }
+
+    #[test]
+    fn test_write_completion_nushell() {
+        let mut cmd = clap::Command::new("leetrs")
+            .subcommand(clap::Command::new("pick"))
+            .arg(clap::Arg::new("verbose").long("verbose").num_args(0));
+        let mut out = Vec::new();
+        write_completion(&Shell::Nushell, &mut cmd, &mut out).unwrap();
+        let script = String::from_utf8(out).unwrap();
+        assert!(script.contains("module completions"));
+        assert!(script.contains("export extern leetrs"));
+        assert!(script.contains("export extern \"leetrs pick\""));
     }
 
     #[test]

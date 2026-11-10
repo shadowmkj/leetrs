@@ -73,7 +73,7 @@ enum Commands {
         cases_file: Option<PathBuf>,
     },
     /// Setup autocomplete for shell
-    Completion { shell: clap_complete::Shell },
+    Completion { shell: commands::Shell },
     /// Clean and invalidate local cache, problem data, and stored credentials
     #[command(alias = "reset")]
     Clean,
@@ -319,5 +319,26 @@ mod tests {
 
         let cli_reset = Cli::try_parse_from(["leetrs", "reset"]).unwrap();
         assert!(matches!(cli_reset.command, Some(Commands::Clean)));
+    }
+
+    #[test]
+    fn test_parse_completion_shells() {
+        let shells = [
+            ("bash", commands::Shell::Bash),
+            ("elvish", commands::Shell::Elvish),
+            ("fish", commands::Shell::Fish),
+            ("nushell", commands::Shell::Nushell),
+            ("nu", commands::Shell::Nushell),
+            ("powershell", commands::Shell::PowerShell),
+            ("zsh", commands::Shell::Zsh),
+        ];
+
+        for (arg, expected) in shells {
+            let cli = Cli::try_parse_from(["leetrs", "completion", arg]).unwrap();
+            match cli.command {
+                Some(Commands::Completion { shell }) => assert_eq!(shell, expected),
+                other => panic!("unexpected command for {arg}: {:?}", other),
+            }
+        }
     }
 }
