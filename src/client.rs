@@ -120,6 +120,36 @@ pub trait LeetCodeApi {
     ) -> impl std::future::Future<Output = Result<crate::models::ActiveDailyQuestion>> + Send;
 }
 
+#[derive(serde::Deserialize, Debug)]
+struct ProblemListResponse {
+    stat_status_pairs: Option<Vec<StatStatusPair>>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct StatStatusPair {
+    stat: Option<StatItem>,
+    difficulty: Option<DifficultyItem>,
+    status: Option<String>,
+    paid_only: Option<bool>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct StatItem {
+    question_id: Option<u64>,
+    frontend_question_id: Option<u64>,
+    #[serde(rename = "question__title")]
+    question_title: Option<String>,
+    #[serde(rename = "question__title_slug")]
+    question_title_slug: Option<String>,
+    total_acs: Option<u64>,
+    total_submitted: Option<u64>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+struct DifficultyItem {
+    level: Option<u64>,
+}
+
 /// A configured `reqwest` HTTP client that authenticates every request with
 /// the user's LeetCode session cookies and CSRF token.
 ///
@@ -157,6 +187,8 @@ impl LeetCodeClient {
         let client = Client::builder()
             .default_headers(headers)
             .cookie_store(true)
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
             .build()?;
 
         Ok(Self {
@@ -243,10 +275,15 @@ impl LeetCodeClient {
 
         Ok(response.question)
     }
+
     /// Fetch a specific problem's details and boilerplate using its numerical ID
     pub async fn get_question_by_id(&self, id: u64) -> Result<Question> {
         let url = "https://leetcode.com/api/problems/all/";
+        let slug = self.get_slug_by_id_from_url(id, url).await?;
+        self.get_question_by_slug(&slug).await
+    }
 
+    pub(crate) async fn get_slug_by_id_from_url(&self, id: u64, url: &str) -> Result<String> {
         let response = self.http_client.get(url).send().await?;
 
         if !response.status().is_success() {
@@ -256,34 +293,21 @@ impl LeetCodeClient {
             )));
         }
 
-        let json_data: serde_json::Value = response.json().await?;
+        let list_response: ProblemListResponse = response.json().await?;
         let mut target_slug = None;
 
-        // Traverse the generic JSON tree to find the matching ID
-        if let Some(pairs) = json_data
-            .get("stat_status_pairs")
-            .and_then(|v| v.as_array())
-        {
+        if let Some(pairs) = list_response.stat_status_pairs {
             for pair in pairs {
-                if let Some(stat) = pair.get("stat") {
-                    let current_id = stat.get("frontend_question_id").and_then(|v| v.as_u64());
-
-                    if current_id == Some(id)
-                        && let Some(slug) =
-                            stat.get("question__title_slug").and_then(|v| v.as_str())
-                    {
-                        target_slug = Some(slug.to_string());
-                        break;
-                    }
+                if let Some(stat) = pair.stat
+                    && stat.frontend_question_id == Some(id)
+                {
+                    target_slug = stat.question_title_slug;
+                    break;
                 }
             }
         }
 
-        let slug = target_slug
-            .ok_or_else(|| EngineError::GraphQL(format!("Problem with ID {} not found", id)))?;
-
-        // Chain directly into the slug fetcher, returning Result<Question>
-        self.get_question_by_slug(&slug).await
+        target_slug.ok_or_else(|| EngineError::GraphQL(format!("Problem with ID {} not found", id)))
     }
 
     /// Test raw code to a problem
@@ -536,6 +560,7 @@ impl LeetCodeClient {
             question_topic_tags: Edge,
         }
 
+        log::debug!("Fetching topic tags via GraphQL questionTopicTags...");
         let response: QuestionTopicWrapper = self.execute_graphql(query).await?;
         let response: Vec<QuestionTopics> = response
             .question_topic_tags
@@ -543,6 +568,7 @@ impl LeetCodeClient {
             .iter()
             .map(|edge| edge.node.clone())
             .collect();
+        log::debug!("Successfully loaded {} topic tags", response.len());
         Ok(response)
     }
 
@@ -554,7 +580,18 @@ impl LeetCodeClient {
         Vec<crate::models::ProblemSummary>,
         std::collections::HashMap<u64, u64>,
     )> {
-        let url = "https://leetcode.com/api/problems/all/";
+        self.get_problem_list_from_url("https://leetcode.com/api/problems/all/")
+            .await
+    }
+
+    pub(crate) async fn get_problem_list_from_url(
+        &self,
+        url: &str,
+    ) -> Result<(
+        Vec<crate::models::ProblemSummary>,
+        std::collections::HashMap<u64, u64>,
+    )> {
+        log::debug!("Fetching problem list from {}...", url);
 
         let response = self.http_client.get(url).send().await?;
 
@@ -565,54 +602,29 @@ impl LeetCodeClient {
             )));
         }
 
-        let json_data: serde_json::Value = response.json().await?;
+        let list_response: ProblemListResponse = response.json().await?;
 
-        if let Some(pairs) = json_data
-            .get("stat_status_pairs")
-            .and_then(|v| v.as_array())
-        {
+        if let Some(pairs) = list_response.stat_status_pairs {
             let mut problems = Vec::with_capacity(pairs.len());
             let mut id_map = std::collections::HashMap::with_capacity(pairs.len());
 
             for pair in pairs {
-                if let (Some(stat), Some(difficulty), Some(status), Some(paid_only)) = (
-                    pair.get("stat"),
-                    pair.get("difficulty"),
-                    pair.get("status"),
-                    pair.get("paid_only"),
-                ) {
-                    let internal_id = stat
-                        .get("question_id")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-                    let frontend_id = stat
-                        .get("frontend_question_id")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+                if let (Some(stat), Some(difficulty)) = (pair.stat, pair.difficulty) {
+                    let internal_id = stat.question_id.unwrap_or(0);
+                    let frontend_id = stat.frontend_question_id.unwrap_or(0);
 
-                    if internal_id > 0 && frontend_id > 0 {
+                    if let Some(slug) = stat.question_title_slug
+                        && !slug.is_empty()
+                        && internal_id > 0
+                        && frontend_id > 0
+                    {
                         id_map.insert(internal_id, frontend_id);
 
-                        let title = stat
-                            .get("question__title")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        let slug = stat
-                            .get("question__title_slug")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        let level = difficulty
-                            .get("level")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0) as u8;
-                        let status = status.as_str().map(String::from);
-                        let accepted = stat.get("total_acs").and_then(|v| v.as_u64()).unwrap_or(0);
-                        let submitted = stat
-                            .get("total_submitted")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(0);
+                        let title = stat.question_title.unwrap_or_default();
+                        let level = difficulty.level.unwrap_or(0) as u8;
+                        let status = pair.status;
+                        let accepted = stat.total_acs.unwrap_or(0);
+                        let submitted = stat.total_submitted.unwrap_or(0);
                         // Guard against division by zero for problems with no submissions yet.
                         let acceptance = if submitted > 0 {
                             accepted as f64 / submitted as f64
@@ -629,7 +641,7 @@ impl LeetCodeClient {
                             submitted,
                             acceptance,
                             status,
-                            is_paid: paid_only.as_bool().unwrap_or(false),
+                            is_paid: pair.paid_only.unwrap_or(false),
                             topics: Vec::new(),
                         });
                     }
@@ -637,6 +649,10 @@ impl LeetCodeClient {
             }
             // The API returns them sorted by ID descending by default, let's sort ascending
             problems.sort_by_key(|p| p.id);
+            log::debug!(
+                "Successfully loaded {} problems from LeetCode",
+                problems.len()
+            );
             return Ok((problems, id_map));
         }
         Err(EngineError::Other(
@@ -849,5 +865,151 @@ mod tests {
         let result = res.unwrap();
         assert_eq!(result.state, "SUCCESS");
         assert_eq!(result.status_msg.as_deref(), Some("Accepted"));
+    }
+
+    #[test]
+    fn test_problem_list_response_deserialization() {
+        let json_data = r#"{
+            "user_name": "test_user",
+            "num_solved": 5,
+            "stat_status_pairs": [
+                {
+                    "stat": {
+                        "question_id": 100,
+                        "frontend_question_id": 1,
+                        "question__title": "Two Sum",
+                        "question__title_slug": "two-sum",
+                        "total_acs": 500,
+                        "total_submitted": 1000,
+                        "question__hide": false
+                    },
+                    "status": "ac",
+                    "difficulty": { "level": 1 },
+                    "paid_only": false,
+                    "frequency": 0
+                },
+                {
+                    "stat": {
+                        "question_id": 101,
+                        "frontend_question_id": 2,
+                        "question__title": "Add Two Numbers",
+                        "question__title_slug": "add-two-numbers",
+                        "total_acs": 200,
+                        "total_submitted": 500
+                    },
+                    "status": null,
+                    "difficulty": { "level": 2 },
+                    "paid_only": true
+                }
+            ]
+        }"#;
+
+        let parsed: ProblemListResponse = serde_json::from_str(json_data).unwrap();
+        let pairs = parsed.stat_status_pairs.expect("stat_status_pairs present");
+        assert_eq!(pairs.len(), 2);
+
+        let p1 = &pairs[0];
+        let s1 = p1.stat.as_ref().unwrap();
+        assert_eq!(s1.question_id, Some(100));
+        assert_eq!(s1.frontend_question_id, Some(1));
+        assert_eq!(s1.question_title.as_deref(), Some("Two Sum"));
+        assert_eq!(s1.question_title_slug.as_deref(), Some("two-sum"));
+        assert_eq!(s1.total_acs, Some(500));
+        assert_eq!(s1.total_submitted, Some(1000));
+        assert_eq!(p1.status.as_deref(), Some("ac"));
+        assert_eq!(p1.difficulty.as_ref().unwrap().level, Some(1));
+        assert_eq!(p1.paid_only, Some(false));
+
+        let p2 = &pairs[1];
+        let s2 = p2.stat.as_ref().unwrap();
+        assert_eq!(s2.question_id, Some(101));
+        assert_eq!(s2.frontend_question_id, Some(2));
+        assert_eq!(p2.status, None);
+        assert_eq!(p2.difficulty.as_ref().unwrap().level, Some(2));
+        assert_eq!(p2.paid_only, Some(true));
+    }
+
+    #[tokio::test]
+    async fn test_client_get_problem_list_and_slug_by_id_from_url() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                let _ = socket.read(&mut buf).await;
+                let body = r#"{
+                    "stat_status_pairs": [
+                        {
+                            "stat": {
+                                "question_id": 100,
+                                "frontend_question_id": 1,
+                                "question__title": "Two Sum",
+                                "question__title_slug": "two-sum",
+                                "total_acs": 500,
+                                "total_submitted": 1000
+                            },
+                            "status": "ac",
+                            "difficulty": { "level": 1 },
+                            "paid_only": false
+                        },
+                        {
+                            "stat": {
+                                "question_id": 101,
+                                "frontend_question_id": 2,
+                                "question__title": "Missing Slug Problem",
+                                "question__title_slug": null,
+                                "total_acs": 50,
+                                "total_submitted": 100
+                            },
+                            "status": null,
+                            "difficulty": { "level": 1 },
+                            "paid_only": false
+                        },
+                        {
+                            "stat": {
+                                "question_id": 102,
+                                "frontend_question_id": 3,
+                                "question__title": "Empty Slug Problem",
+                                "question__title_slug": "",
+                                "total_acs": 50,
+                                "total_submitted": 100
+                            },
+                            "status": null,
+                            "difficulty": { "level": 1 },
+                            "paid_only": false
+                        }
+                    ]
+                }"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            }
+        });
+
+        let creds = LeetCodeCredentials {
+            session_cookie: "test".to_string(),
+            csrf_token: "test".to_string(),
+        };
+        let client = LeetCodeClient::new(creds).unwrap();
+        let url = format!("http://{}/api/problems/all/", addr);
+
+        let (problems, id_map) = client.get_problem_list_from_url(&url).await.unwrap();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].id, 1);
+        assert_eq!(problems[0].title, "Two Sum");
+        assert_eq!(problems[0].slug, "two-sum");
+        assert_eq!(id_map.get(&100), Some(&1));
+        assert_eq!(id_map.get(&101), None);
+        assert_eq!(id_map.get(&102), None);
+
+        let slug = client.get_slug_by_id_from_url(1, &url).await.unwrap();
+        assert_eq!(slug, "two-sum");
+
+        let err = client.get_slug_by_id_from_url(999, &url).await;
+        assert!(err.is_err());
     }
 }

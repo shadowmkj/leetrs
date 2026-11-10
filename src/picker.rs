@@ -22,11 +22,19 @@ use std::fs;
 #[derive(Clone)]
 pub struct Picker<C = LeetCodeClient> {
     pub client: C,
+    pub cache: CacheService,
 }
 
 impl<C> Picker<C> {
     pub fn new(client: C) -> Self {
-        Picker { client }
+        Picker {
+            client,
+            cache: CacheService::new(),
+        }
+    }
+
+    pub fn with_cache(client: C, cache: CacheService) -> Self {
+        Picker { client, cache }
     }
 }
 
@@ -69,8 +77,7 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
         let dir = solutions_dir();
 
         let cached_slug = if let Identifier::Number(num) = identifier {
-            let cache = CacheService::new();
-            if let Ok(Some(problems)) = cache.read::<Vec<ProblemSummary>>("data.json") {
+            if let Ok(Some(problems)) = self.cache.read::<Vec<ProblemSummary>>("data.json") {
                 problems.into_iter().find(|p| p.id == *num).map(|p| p.slug)
             } else {
                 None
@@ -215,41 +222,42 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     ///    fetches the latest data from the API and overwrites the file.
     /// 3. If not found, block on the API fetch, write the file, then return.
     pub async fn get_user_data(&self) -> crate::error::Result<UserDetail> {
-        let cache = CacheService::new();
-        let user_path = cache.user_path();
-        let data = match fs::read_to_string(&user_path) {
+        let user_path = self.cache.user_path();
+        match fs::read_to_string(&user_path) {
             Ok(v) => {
                 let client = self.client.clone();
                 let user_path_bg = user_path.clone();
                 tokio::spawn(async move {
-                    let result: Result<(), Box<dyn std::error::Error>> = async {
+                    let result: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
                         let user_detail = client.get_user_detail().await?;
                         let data = serde_json::to_string(&user_detail)?;
-                        let _ = fs::write(&user_path_bg, &data);
+                        let _ = crate::cache::write_atomic(&user_path_bg, data.as_bytes());
                         Ok(())
                     }
                     .await;
 
                     let _ = result;
                 });
-                v
+
+                let user_detail: UserDetail = serde_json::from_str(&v).map_err(|e| {
+                    eprintln!("Failed to parse user details: {}", e);
+                    eprintln!("Try running `leetrs tui` again to refresh the cache.");
+                    if let Err(err) = fs::remove_file(&user_path) {
+                        eprintln!("Failed to remove corrupted cache file: {}", err);
+                    }
+                    e
+                })?;
+                Ok(user_detail)
             }
             Err(_) => {
+                log::debug!("Cache miss: fetching user profile from LeetCode...");
                 let user_detail = self.client.get_user_detail().await?;
-                let data = serde_json::to_string(&user_detail)?;
-                let _ = fs::write(&user_path, &data);
-                data
+                if let Ok(data) = serde_json::to_string(&user_detail) {
+                    let _ = crate::cache::write_atomic(&user_path, data.as_bytes());
+                }
+                Ok(user_detail)
             }
-        };
-        let user_detail: UserDetail = serde_json::from_str(&data).map_err(|e| {
-            eprintln!("Failed to parse user details: {}", e);
-            eprintln!("Try running `leetrs tui` again to refresh the cache.");
-            if let Err(err) = fs::remove_file(&user_path) {
-                eprintln!("Failed to remove corrupted cache file: {}", err);
-            }
-            e
-        })?;
-        Ok(user_detail)
+        }
     }
 
     /// Returns the full problem list, enriched with topic tags.
@@ -260,10 +268,9 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
     ///    fetches a fresh list (problems + tags) and overwrites the cache.
     /// 3. If not found, block on both API calls, write the cache, then return.
     pub async fn list_problems(&self) -> crate::error::Result<Vec<ProblemSummary>> {
-        let cache = CacheService::new();
-        let data_path = cache.problems_path();
-        let user_path = cache.user_path();
-        let data = match fs::read_to_string(&data_path) {
+        let data_path = self.cache.problems_path();
+        let user_path = self.cache.user_path();
+        match fs::read_to_string(&data_path) {
             Ok(v) => {
                 // Fetch data in the background and update data.json for next time
                 let client_clone = self.client.clone();
@@ -271,40 +278,49 @@ impl<C: LeetCodeApi + Clone + Send + Sync + 'static> Picker<C> {
                 let user_path_bg = user_path.clone();
                 tokio::spawn(async move {
                     let res: Result<(), Box<dyn std::error::Error + Send + Sync>> = async {
-                        let user_detail = client_clone.get_user_detail().await?;
-                        let data = serde_json::to_string(&user_detail)?;
-                        let _ = fs::write(&user_path_bg, data);
-                        let (mut problems, id_map) = client_clone.get_problem_list().await?;
-                        let question_tags = client_clone.get_topics_question_list().await?;
+                        let user_res = client_clone.get_user_detail();
+                        let problems_res = client_clone.get_problem_list();
+                        let tags_res = client_clone.get_topics_question_list();
+
+                        let (user_detail, (mut problems, id_map), question_tags) =
+                            tokio::try_join!(user_res, problems_res, tags_res)?;
+
+                        let user_data = serde_json::to_string(&user_detail)?;
+                        let _ = crate::cache::write_atomic(&user_path_bg, user_data.as_bytes());
+
                         attach_topics(&mut problems, question_tags, &id_map);
                         let data = serde_json::to_string(&problems)?;
-                        let _ = fs::write(&data_path_bg, data);
+                        let _ = crate::cache::write_atomic(&data_path_bg, data.as_bytes());
                         Ok(())
                     }
                     .await;
 
                     let _ = res;
                 });
-                v
+
+                let problems: Vec<ProblemSummary> = serde_json::from_str(&v).map_err(|e| {
+                    eprintln!("Failed to parse problem list: {}", e);
+                    eprintln!("Try running `leetrs tui` again to refresh the cache.");
+                    if let Err(err) = fs::remove_file(&data_path) {
+                        eprintln!("Failed to remove corrupted cache file: {}", err);
+                    }
+                    e
+                })?;
+                Ok(problems)
             }
             Err(_) => {
-                let (mut problems, id_map) = self.client.get_problem_list().await?;
-                let question_tags = self.client.get_topics_question_list().await?;
+                log::debug!("Cache miss: fetching problem list and topic tags concurrently...");
+                let ((mut problems, id_map), question_tags) = tokio::try_join!(
+                    self.client.get_problem_list(),
+                    self.client.get_topics_question_list()
+                )?;
                 attach_topics(&mut problems, question_tags, &id_map);
-                let data = serde_json::to_string(&problems)?;
-                let _ = fs::write(&data_path, &data);
-                data
+                if let Ok(data) = serde_json::to_string(&problems) {
+                    let _ = crate::cache::write_atomic(&data_path, data.as_bytes());
+                }
+                Ok(problems)
             }
-        };
-        let problems: Vec<ProblemSummary> = serde_json::from_str(&data).map_err(|e| {
-            eprintln!("Failed to parse problem list: {}", e);
-            eprintln!("Try running `leetrs tui` again to refresh the cache.");
-            if let Err(err) = fs::remove_file(&data_path) {
-                eprintln!("Failed to remove corrupted cache file: {}", err);
-            }
-            e
-        })?;
-        Ok(problems)
+        }
     }
 }
 
@@ -522,13 +538,23 @@ mod tests {
         }
 
         async fn get_user_detail(&self) -> crate::error::Result<crate::models::UserDetail> {
-            unimplemented!()
+            Ok(crate::models::UserDetail {
+                username: Some("test_user".to_string()),
+                is_premium: Some(true),
+                is_verified: true,
+            })
         }
 
         async fn get_topics_question_list(
             &self,
         ) -> crate::error::Result<Vec<crate::models::QuestionTopics>> {
-            unimplemented!()
+            Ok(vec![crate::models::QuestionTopics {
+                name: "Array".to_string(),
+                id: "array".to_string(),
+                slug: "array".to_string(),
+                translated_name: None,
+                question_ids: vec![100],
+            }])
         }
 
         async fn get_problem_list(
@@ -537,13 +563,42 @@ mod tests {
             Vec<crate::models::ProblemSummary>,
             std::collections::HashMap<u64, u64>,
         )> {
-            unimplemented!()
+            let mut id_map = std::collections::HashMap::new();
+            id_map.insert(100, 1);
+            let problems = vec![crate::models::ProblemSummary {
+                id: 1,
+                title: "Two Sum".to_string(),
+                slug: "two-sum".to_string(),
+                difficulty: 1,
+                accepted: 100,
+                submitted: 200,
+                acceptance: 0.5,
+                status: Some("ac".to_string()),
+                is_paid: false,
+                topics: vec![],
+            }];
+            Ok((problems, id_map))
         }
 
         async fn get_daily_challenge(
             &self,
         ) -> crate::error::Result<crate::models::ActiveDailyQuestion> {
             unimplemented!()
+        }
+    }
+
+    fn dummy_question() -> Question {
+        Question {
+            question_id: "1".to_string(),
+            question_frontend_id: "1".to_string(),
+            title_slug: "two-sum".to_string(),
+            title: "Two Sum".to_string(),
+            content: "<p>Content</p>".to_string(),
+            example_test_cases: "".to_string(),
+            code_snippets: vec![QuestionSnippet {
+                lang_slug: "rust".to_string(),
+                code: "// code".to_string(),
+            }],
         }
     }
 
@@ -649,7 +704,8 @@ mod tests {
         fs::write(desc_file, user_desc).unwrap();
 
         // Write cached problem entry
-        let cache = CacheService::new();
+        let temp_dir = crate::cache::TempTestDir::new("leetrs-fast-path");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
         let cached_problems = vec![ProblemSummary {
             id: 7777,
             title: "Test Fast Path Problem".to_string(),
@@ -731,7 +787,7 @@ mod tests {
             }
         }
 
-        let picker = Picker::new(PanickingMockClient);
+        let picker = Picker::with_cache(PanickingMockClient, cache);
         let res = picker
             .pick(&Identifier::Number(7777), &Some(Language::Rust))
             .await;
@@ -746,5 +802,61 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(code_content, user_code);
         assert_eq!(desc_content, user_desc);
+    }
+
+    #[tokio::test]
+    async fn test_picker_get_user_data_cold_and_warm() {
+        let temp_dir = crate::cache::TempTestDir::new("leetrs-picker-user");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
+        let user_path = cache.user_path();
+
+        let picker = Picker::with_cache(
+            MockLeetCodeClient {
+                question: dummy_question(),
+            },
+            cache,
+        );
+
+        // 1. Cold cache fetch
+        let user = picker.get_user_data().await.unwrap();
+        assert_eq!(user.username.as_deref(), Some("test_user"));
+        assert!(user_path.exists());
+
+        // 2. Warm cache read
+        let cached_user = picker.get_user_data().await.unwrap();
+        assert_eq!(cached_user.username.as_deref(), Some("test_user"));
+
+        // Allow background refresh task spawned during warm cache read to run
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    #[tokio::test]
+    async fn test_picker_list_problems_cold_and_warm() {
+        let temp_dir = crate::cache::TempTestDir::new("leetrs-picker-problems");
+        let cache = CacheService::with_dir(temp_dir.path().to_path_buf());
+        let data_path = cache.problems_path();
+
+        let picker = Picker::with_cache(
+            MockLeetCodeClient {
+                question: dummy_question(),
+            },
+            cache,
+        );
+
+        // 1. Cold cache fetch
+        let problems = picker.list_problems().await.unwrap();
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].id, 1);
+        assert_eq!(problems[0].topics, vec!["Array".to_string()]);
+        assert!(data_path.exists());
+
+        // 2. Warm cache read
+        let cached_problems = picker.list_problems().await.unwrap();
+        assert_eq!(cached_problems.len(), 1);
+        assert_eq!(cached_problems[0].id, 1);
+        assert_eq!(cached_problems[0].topics, vec!["Array".to_string()]);
+
+        // Allow background refresh task spawned during warm cache read to run
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
 }
