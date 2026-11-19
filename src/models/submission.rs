@@ -32,12 +32,14 @@ pub struct SubmitResponse {
     pub submission_id: u64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 pub struct TestSubmissionCheckResult {
     pub code_answer: Option<Vec<String>>,
     pub code_output: Option<Vec<String>>,
+    pub compile_error: Option<String>,
     pub correct_answer: Option<bool>,
     pub expected_code_answer: Option<Vec<String>>,
+    pub full_compile_error: Option<String>,
     pub full_runtime_error: Option<String>,
     pub lang: Option<String>,
     pub memory_percentile: Option<f64>,
@@ -53,7 +55,7 @@ pub struct TestSubmissionCheckResult {
     pub total_testcases: Option<u32>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 pub struct SubmissionCheckResult {
     pub code_output: Option<String>,
     pub compile_error: Option<String>,

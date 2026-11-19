@@ -6,51 +6,59 @@ use std::fmt::Write as _;
 
 use crate::services::submission::{SubmissionResult, SubmissionStatus};
 
-/// Prints a human-readable summary of a submission or test result to stdout.
-pub fn format_result(result: &SubmissionResult) {
-    println!("\n==================================================");
+/// Returns a human-readable summary of a submission or test result as a string.
+pub fn format_result_to_string(result: &SubmissionResult) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "\n==================================================");
 
     if result.is_test {
         let passed = result.correct_answer.unwrap_or(false);
         if passed {
-            println!("  ✅ All test cases passed");
+            let _ = writeln!(out, "  ✅ All test cases passed");
+        } else if result.status == SubmissionStatus::CompileError {
+            let _ = writeln!(out, "  ❌ Compile Error");
         } else {
-            println!("  ❌ Test Failed");
+            let _ = writeln!(out, "  ❌ Test Failed");
         }
-        println!("==================================================\n");
+        let _ = writeln!(out, "==================================================\n");
 
         if let (Some(correct), Some(total)) = (result.total_correct, result.total_testcases) {
-            println!("🧪 Testcases: {} / {} passed", correct, total);
+            let _ = writeln!(out, "🧪 Testcases: {} / {} passed", correct, total);
         }
 
         match &result.status {
             SubmissionStatus::Accepted if passed => {
                 if let Some(runtime) = &result.runtime {
-                    println!("⏱️ Runtime: {}", runtime);
+                    let _ = writeln!(out, "⏱️ Runtime: {}", runtime);
                 }
                 if let Some(memory) = &result.memory {
-                    println!("💾 Memory: {}", memory);
+                    let _ = writeln!(out, "💾 Memory: {}", memory);
                 }
                 if let Some(mp) = result.memory_percentile {
-                    println!("📝 Memory Percentile: {:.2}%", mp);
+                    let _ = writeln!(out, "📝 Memory Percentile: {:.2}%", mp);
                 }
                 if let Some(rp) = result.runtime_percentile {
-                    println!("⏰ Runtime Percentile: {:.2}%", rp);
+                    let _ = writeln!(out, "⏰ Runtime Percentile: {:.2}%", rp);
                 }
             }
             SubmissionStatus::Accepted => {
                 if let (Some(code_answers), Some(expected)) =
                     (&result.code_answer, &result.expected_code_answer)
                 {
-                    println!("Expected");
-                    println!("{}", expected.join("\t"));
-                    println!("Output");
-                    println!("{}", code_answers.join("\t"));
+                    let _ = writeln!(out, "Expected");
+                    let _ = writeln!(out, "{}", expected.join("\t"));
+                    let _ = writeln!(out, "Output");
+                    let _ = writeln!(out, "{}", code_answers.join("\t"));
                 }
             }
             SubmissionStatus::RuntimeError => {
                 if let Some(err) = &result.full_runtime_error {
-                    println!("❌ Error\n{}", err);
+                    let _ = writeln!(out, "❌ Error\n{}", err);
+                }
+            }
+            SubmissionStatus::CompileError => {
+                if let Some(err) = &result.compile_error {
+                    let _ = writeln!(out, "💥 Compiler Output:\n{}", err);
                 }
             }
             _ => {}
@@ -58,73 +66,73 @@ pub fn format_result(result: &SubmissionResult) {
     } else {
         let status_label = match &result.status {
             SubmissionStatus::Accepted => {
-                println!("  ✅ Accepted");
+                let _ = writeln!(out, "  ✅ Accepted");
                 "Accepted"
             }
             SubmissionStatus::WrongAnswer => {
-                println!("  ❌ Wrong Answer");
+                let _ = writeln!(out, "  ❌ Wrong Answer");
                 "Wrong Answer"
             }
             SubmissionStatus::CompileError => {
-                println!("  ❌ Compile Error");
+                let _ = writeln!(out, "  ❌ Compile Error");
                 "Compile Error"
             }
             SubmissionStatus::RuntimeError => {
-                println!("  ❌ Runtime Error");
+                let _ = writeln!(out, "  ❌ Runtime Error");
                 "Runtime Error"
             }
             SubmissionStatus::TimeLimitExceeded => {
-                println!("  ❌ Time Limit Exceeded");
+                let _ = writeln!(out, "  ❌ Time Limit Exceeded");
                 "Time Limit Exceeded"
             }
             SubmissionStatus::Unknown(msg) => {
-                println!("  ❌ {}", msg);
+                let _ = writeln!(out, "  ❌ {}", msg);
                 msg.as_str()
             }
         };
-        println!("==================================================\n");
+        let _ = writeln!(out, "==================================================\n");
 
         if let (Some(correct), Some(total)) = (result.total_correct, result.total_testcases) {
-            println!("🧪 Testcases: {} / {} passed", correct, total);
+            let _ = writeln!(out, "🧪 Testcases: {} / {} passed", correct, total);
         }
 
         match &result.status {
             SubmissionStatus::Accepted => {
                 if let Some(runtime) = &result.runtime {
-                    println!("⏱️ Runtime: {}", runtime);
+                    let _ = writeln!(out, "⏱️ Runtime: {}", runtime);
                 }
                 if let Some(memory) = &result.memory {
-                    println!("💾 Memory: {}", memory);
+                    let _ = writeln!(out, "💾 Memory: {}", memory);
                 }
                 if let Some(mp) = result.memory_percentile {
-                    println!("📝 Memory Percentile: {:.2}%", mp);
+                    let _ = writeln!(out, "📝 Memory Percentile: {:.2}%", mp);
                 }
                 if let Some(rp) = result.runtime_percentile {
-                    println!("⏰ Runtime Percentile: {:.2}%", rp);
+                    let _ = writeln!(out, "⏰ Runtime Percentile: {:.2}%", rp);
                 }
             }
             SubmissionStatus::CompileError => {
                 if let Some(err) = &result.compile_error {
-                    println!("💥 Compiler Output:\n{}", err);
+                    let _ = writeln!(out, "💥 Compiler Output:\n{}", err);
                 }
             }
             SubmissionStatus::WrongAnswer => {
                 if let Some(input) = &result.input {
-                    print!("INPUT: ");
+                    let _ = write!(out, "INPUT: ");
                     for part in input.split('\n') {
-                        print!("{}\t", part);
+                        let _ = write!(out, "{}\t", part);
                     }
-                    println!();
+                    let _ = writeln!(out);
                 }
                 if let (Some(expected), Some(output)) =
                     (&result.expected_output, &result.code_output)
                 {
-                    println!("Expected: {}\nOutput: {}", expected, output);
+                    let _ = writeln!(out, "Expected: {}\nOutput: {}", expected, output);
                 }
             }
             SubmissionStatus::RuntimeError => {
                 if let Some(err) = &result.full_runtime_error {
-                    println!("❌ Error\n{}", err);
+                    let _ = writeln!(out, "❌ Error\n{}", err);
                 }
             }
             _ => {
@@ -134,8 +142,15 @@ pub fn format_result(result: &SubmissionResult) {
     }
 
     if let Some(stdout) = format_stdout(result.std_output_list.as_deref()) {
-        println!("\n{}", stdout);
+        let _ = writeln!(out, "\n{}", stdout);
     }
+
+    out
+}
+
+/// Prints a human-readable summary of a submission or test result to stdout.
+pub fn format_result(result: &SubmissionResult) {
+    print!("{}", format_result_to_string(result));
 }
 
 /// Formats captured stdout from test cases or submission into a human-readable string,
@@ -278,6 +293,36 @@ mod tests {
             std_output_list: None,
         };
         format_result(&res);
+    }
+
+    #[test]
+    fn test_format_result_test_compile_error() {
+        let res = SubmissionResult {
+            status: SubmissionStatus::CompileError,
+            is_test: true,
+            correct_answer: Some(false),
+            code_answer: None,
+            expected_code_answer: None,
+            total_correct: None,
+            total_testcases: None,
+            runtime: None,
+            memory: None,
+            memory_percentile: None,
+            runtime_percentile: None,
+            compile_error: Some(
+                "Line 12: Char 5: error: expected ';' before '}' token".to_string(),
+            ),
+            full_runtime_error: None,
+            input: None,
+            expected_output: None,
+            code_output: None,
+            std_output_list: None,
+        };
+        let formatted = format_result_to_string(&res);
+        assert!(formatted.contains("❌ Compile Error"));
+        assert!(formatted.contains(
+            "💥 Compiler Output:\nLine 12: Char 5: error: expected ';' before '}' token"
+        ));
     }
 
     #[test]

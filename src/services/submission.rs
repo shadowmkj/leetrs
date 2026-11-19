@@ -78,6 +78,7 @@ impl SubmissionResult {
             .std_output_list
             .filter(|list| !list.is_empty())
             .or_else(|| r.std_output.map(|s| vec![s]));
+        let compile_error = r.full_compile_error.or(r.compile_error);
         Self {
             status: SubmissionStatus::from_msg(status_msg),
             is_test: true,
@@ -90,7 +91,7 @@ impl SubmissionResult {
             memory: r.status_memory,
             memory_percentile: r.memory_percentile,
             runtime_percentile: r.runtime_percentile,
-            compile_error: None,
+            compile_error,
             full_runtime_error: r.full_runtime_error,
             input: None,
             expected_output: None,
@@ -308,8 +309,10 @@ mod tests {
         let check = TestSubmissionCheckResult {
             code_answer: Some(vec!["[0, 1]".into()]),
             code_output: Some(vec!["out1".into(), "out2".into()]),
+            compile_error: None,
             correct_answer: Some(true),
             expected_code_answer: Some(vec!["[0, 1]".into()]),
+            full_compile_error: None,
             full_runtime_error: None,
             lang: Some("rust".into()),
             memory_percentile: Some(85.0),
@@ -339,12 +342,46 @@ mod tests {
     }
 
     #[test]
+    fn test_from_test_check_with_compile_error() {
+        let check = TestSubmissionCheckResult {
+            code_answer: None,
+            code_output: None,
+            compile_error: Some("Line 5: syntax error".into()),
+            correct_answer: Some(false),
+            expected_code_answer: None,
+            full_compile_error: Some("Line 5: Col 12: syntax error: unexpected token".into()),
+            full_runtime_error: None,
+            lang: Some("rust".into()),
+            memory_percentile: None,
+            run_success: Some(false),
+            runtime_percentile: None,
+            state: "SUCCESS".into(),
+            status_memory: None,
+            status_msg: Some("Compile Error".into()),
+            status_runtime: None,
+            std_output: None,
+            std_output_list: None,
+            total_correct: None,
+            total_testcases: None,
+        };
+
+        let result = SubmissionResult::from_test_check(check);
+        assert_eq!(result.status, SubmissionStatus::CompileError);
+        assert_eq!(
+            result.compile_error.as_deref(),
+            Some("Line 5: Col 12: syntax error: unexpected token")
+        );
+    }
+
+    #[test]
     fn test_from_test_check_fallback_on_empty_list() {
         let check = TestSubmissionCheckResult {
             code_answer: None,
             code_output: None,
+            compile_error: None,
             correct_answer: Some(false),
             expected_code_answer: None,
+            full_compile_error: None,
             full_runtime_error: Some("panic message".into()),
             lang: Some("rust".into()),
             memory_percentile: None,
@@ -375,8 +412,10 @@ mod tests {
         let check = TestSubmissionCheckResult {
             code_answer: None,
             code_output: None,
+            compile_error: None,
             correct_answer: None,
             expected_code_answer: None,
+            full_compile_error: None,
             full_runtime_error: None,
             lang: None,
             memory_percentile: None,
